@@ -1,4 +1,5 @@
 package it.uniroma2.isw2;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -8,9 +9,6 @@ import java.net.URL;
 import java.nio.charset.Charset;
 
 class RetrieveTicketsID {
-
-
-
 
     private static String readAll(Reader rd) throws IOException {
         StringBuilder sb = new StringBuilder();
@@ -26,8 +24,7 @@ class RetrieveTicketsID {
         try {
             BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
             String jsonText = readAll(rd);
-            JSONArray json = new JSONArray(jsonText);
-            return json;
+            return new JSONArray(jsonText);
         } finally {
             is.close();
         }
@@ -38,38 +35,98 @@ class RetrieveTicketsID {
         try {
             BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
             String jsonText = readAll(rd);
-            JSONObject json = new JSONObject(jsonText);
-            return json;
+            return new JSONObject(jsonText);
         } finally {
             is.close();
         }
     }
 
-
-
     public static void main(String[] args) throws IOException, JSONException {
+        String projName = "SYNCOPE";
+        int i = 0;
+        int total;
+        int pageSize = 1000;
 
-        String projName ="ACCUMULO";
-        Integer j = 0, i = 0, total = 1;
-        //Get JSON API for closed bugs w/ AV in the project
-        do {
-            //Only gets a max of 1000 at a time, so must do this multiple times if bugs >1000
-            j = i + 1000;
-            String url = "https://issues.apache.org/jira/rest/api/2/search?jql=project=%22"
-                    + projName + "%22AND%22issueType%22=%22Bug%22AND(%22status%22=%22closed%22OR"
-                    + "%22status%22=%22resolved%22)AND%22resolution%22=%22fixed%22&fields=key,resolutiondate,versions,created&startAt="
-                    + i.toString() + "&maxResults=" + j.toString();
-            JSONObject json = readJsonFromUrl(url);
-            JSONArray issues = json.getJSONArray("issues");
-            total = json.getInt("total");
-            for (; i < total && i < j; i++) {
-                //Iterate through each bug
-                String key = issues.getJSONObject(i%1000).get("key").toString();
-                System.out.println(key);
+        FileWriter fileWriter = null;
+
+        try {
+            String outName = projName + "Tickets.csv";
+            fileWriter = new FileWriter(outName);
+
+            fileWriter.append("TicketID,CreationDate,ResolutionDate,AffectedVersions\n");
+
+            do {
+                String url = "https://issues.apache.org/jira/rest/api/2/search?jql=project=%22"
+                        + projName
+                        + "%22AND%22issueType%22=%22Bug%22AND(%22status%22=%22closed%22OR%22status%22=%22resolved%22)"
+                        + "AND%22resolution%22=%22fixed%22&fields=key,resolutiondate,versions,created&startAt="
+                        + i
+                        + "&maxResults="
+                        + pageSize;
+
+                JSONObject json = readJsonFromUrl(url);
+                JSONArray issues = json.getJSONArray("issues");
+                total = json.getInt("total");
+
+                for (int k = 0; k < issues.length(); k++) {
+                    JSONObject issue = issues.getJSONObject(k);
+                    JSONObject fields = issue.getJSONObject("fields");
+
+                    String key = issue.getString("key");
+                    String created = fields.has("created") && !fields.isNull("created")
+                            ? fields.getString("created")
+                            : "";
+                    String resolutionDate = fields.has("resolutiondate") && !fields.isNull("resolutiondate")
+                            ? fields.getString("resolutiondate")
+                            : "";
+
+                    StringBuilder affectedVersions = new StringBuilder();
+                    if (fields.has("versions") && !fields.isNull("versions")) {
+                        JSONArray versions = fields.getJSONArray("versions");
+                        for (int v = 0; v < versions.length(); v++) {
+                            JSONObject versionObj = versions.getJSONObject(v);
+                            if (versionObj.has("name")) {
+                                if (affectedVersions.length() > 0) {
+                                    affectedVersions.append(";");
+                                }
+                                affectedVersions.append(versionObj.getString("name"));
+                            }
+                        }
+                    }
+
+                    fileWriter.append(escapeCsv(key)).append(",");
+                    fileWriter.append(escapeCsv(created)).append(",");
+                    fileWriter.append(escapeCsv(resolutionDate)).append(",");
+                    fileWriter.append(escapeCsv(affectedVersions.toString())).append("\n");
+                }
+
+                i += issues.length();
+
+            } while (i < total);
+
+            System.out.println("CSV creato con successo.");
+
+        } catch (Exception e) {
+            System.out.println("Errore nella scrittura del CSV.");
+            e.printStackTrace();
+        } finally {
+            if (fileWriter != null) {
+                try {
+                    fileWriter.flush();
+                    fileWriter.close();
+                } catch (IOException e) {
+                    System.out.println("Errore nella chiusura del file.");
+                    e.printStackTrace();
+                }
             }
-        } while (i < total);
-        return;
+        }
     }
 
-
+    private static String escapeCsv(String value) {
+        if (value == null) {
+            return "";
+        }
+        String escaped = value.replace("\"", "\"\"");
+        return "\"" + escaped + "\"";
+    }
 }
