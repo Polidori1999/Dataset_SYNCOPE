@@ -6,6 +6,7 @@ import java.util.List;
 
 /**
  * Classe per il calcolo della proportion media.
+ * Usa solo ticket con IV derivata da AV valida.
  */
 public class ProportionCalculator {
 
@@ -17,6 +18,10 @@ public class ProportionCalculator {
         int count = 0;
 
         for (EnhancedTicket ticket : tickets) {
+            if (!"AV".equals(ticket.getInjectedVersionSource())) {
+                continue;
+            }
+
             int iv = findReleaseIndex(ticket.getInjectedVersion(), releases);
             int ov = findReleaseIndex(ticket.getOpeningVersion(), releases);
             int fv = findReleaseIndex(ticket.getFixedVersion(), releases);
@@ -25,11 +30,11 @@ public class ProportionCalculator {
                 continue;
             }
 
-            if (!(iv <= ov && ov <= fv)) {
-                continue;
-            }
-
-            if (fv == ov) {
+            /*
+             * Vincoli coerenti con il defect lifecycle:
+             * IV <= OV < FV
+             */
+            if (!(iv <= ov && ov < fv)) {
                 continue;
             }
 

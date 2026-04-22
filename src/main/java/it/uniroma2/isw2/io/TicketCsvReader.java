@@ -17,28 +17,61 @@ public class TicketCsvReader {
         List<Ticket> tickets = new ArrayList<>();
 
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-            String line = br.readLine();
+            String headerLine = br.readLine();
 
-            if (line == null) {
+            if (headerLine == null) {
                 return tickets;
             }
 
+            List<String> headers = CsvUtils.parseCsvLine(headerLine);
+
+            int ticketIdIndex = findColumnIndex(headers, "TicketID", "ticketId", "id");
+            int creationDateIndex = findColumnIndex(headers, "CreationDate", "creationDate");
+            int resolutionDateIndex = findColumnIndex(headers, "ResolutionDate", "resolutionDate");
+            int affectedVersionsIndex = findColumnIndex(headers, "AV", "AffectedVersions", "affectedVersions");
+
+            String line;
             while ((line = br.readLine()) != null) {
                 List<String> fields = CsvUtils.parseCsvLine(line);
 
-                if (fields.size() < 4) {
+                String ticketId = getField(fields, ticketIdIndex);
+                String creationDate = getField(fields, creationDateIndex);
+                String resolutionDate = getField(fields, resolutionDateIndex);
+                String affectedVersions = getField(fields, affectedVersionsIndex);
+
+                if (ticketId.isBlank() || creationDate.isBlank()) {
                     continue;
                 }
 
-                String ticketId = CsvUtils.removeQuotes(fields.get(0));
-                String creationDate = CsvUtils.removeQuotes(fields.get(1));
-                String resolutionDate = CsvUtils.removeQuotes(fields.get(2));
-                String affectedVersions = CsvUtils.removeQuotes(fields.get(3));
-
-                tickets.add(new Ticket(ticketId, creationDate, resolutionDate, affectedVersions));
+                tickets.add(new Ticket(
+                        ticketId,
+                        creationDate,
+                        resolutionDate,
+                        affectedVersions
+                ));
             }
         }
 
         return tickets;
+    }
+
+    private static int findColumnIndex(List<String> headers, String... candidates) {
+        for (int i = 0; i < headers.size(); i++) {
+            String normalizedHeader = CsvUtils.removeQuotes(headers.get(i)).trim();
+
+            for (String candidate : candidates) {
+                if (normalizedHeader.equalsIgnoreCase(candidate)) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static String getField(List<String> fields, int index) {
+        if (index < 0 || index >= fields.size()) {
+            return "";
+        }
+        return CsvUtils.removeQuotes(fields.get(index)).trim();
     }
 }
