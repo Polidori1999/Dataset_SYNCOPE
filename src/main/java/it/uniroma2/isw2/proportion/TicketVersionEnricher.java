@@ -2,6 +2,7 @@ package it.uniroma2.isw2.proportion;
 
 import it.uniroma2.isw2.model.Release;
 import it.uniroma2.isw2.model.Ticket;
+import it.uniroma2.isw2.utils.DateUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
