@@ -323,9 +323,19 @@ public class BuggyClassService {
     }
 
     private static boolean isProductionJavaClass(String path) {
-        return path.endsWith(".java")
-                && path.contains("/src/main/java/")
-                && !path.contains("/src/test/java/");
+        String normalizedPath = normalizePath(path);
+
+        return normalizedPath.endsWith(".java")
+                && normalizedPath.contains("/src/main/java/")
+                && !normalizedPath.contains("/src/test/java/")
+                && !isExcludedModulePath(normalizedPath);
+    }
+
+    private static boolean isExcludedModulePath(String path) {
+        return path.startsWith("fit/")
+                || path.contains("/fit/")
+                || path.startsWith("syncope620/")
+                || path.contains("/syncope620/");
     }
 
     private static String normalizePath(String path) {

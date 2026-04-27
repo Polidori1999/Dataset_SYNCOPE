@@ -4,10 +4,15 @@ import it.uniroma2.isw2.io.*;
 import it.uniroma2.isw2.labeling.*;
 import it.uniroma2.isw2.model.*;
 import it.uniroma2.isw2.proportion.*;
+import it.uniroma2.isw2.smell.PmdFileListWriter;
+import it.uniroma2.isw2.smell.PmdRunner;
+import it.uniroma2.isw2.smell.SmellComputationResult;
+import it.uniroma2.isw2.smell.SmellService;
 import it.uniroma2.isw2.utils.ReleaseSelector;
 
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +45,49 @@ public class Main {
 
     private static final String BUGGY_CLASS_RELEASE_LABELS_FILE =
             PROJECT_NAME + "_BuggyClassReleaseLabels.csv";
+
+
+
+    private static final String FINAL_DATASET_WITH_SMELLS_FILE =
+            PROJECT_NAME + "_FinalDatasetWithSmells.csv";
+
+
+    private static final String CLASS_RELEASE_SMELLS_FILE =
+            PROJECT_NAME + "_ClassReleaseSmells.csv";
+
+    private static final String PMD_ANALYSIS_ERRORS_FILE =
+            PROJECT_NAME + "_PmdAnalysisErrors.csv";
+
+    private static final String PMD_EXECUTABLE =
+            "/home/leonardo/uni/isw2/pmd/pmd-bin-7.24.0/bin/pmd";
+
+    private static final String PMD_RULESET =
+            "rulesets/java/quickstart.xml";
+
+    private static final String PMD_JAVA_VERSION =
+            "java-21";
+
+    private static final String PMD_FILE_LISTS_DIR =
+            "target/pmd-filelists/" + PROJECT_NAME;
+
+    private static final String PMD_REPORTS_DIR =
+            "target/pmd-reports/" + PROJECT_NAME;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     public static void main(String[] args) throws IOException {
         System.out.println("Avvio costruzione dataset del progetto " + PROJECT_NAME + ".");
 
@@ -169,6 +217,64 @@ public class Main {
             );
             System.out.println("File finale classe-release yes/no creato: "
                     + FINAL_CLASS_RELEASE_LABELS_FILE);
+
+            /*
+             * STEP 14:
+             * Calcolo degli smell PMD per ogni coppia classe-release.
+             * PMD viene eseguito sullo snapshot reale di ciascuna release selezionata.
+             */
+            PmdFileListWriter pmdFileListWriter =
+                    new PmdFileListWriter(Path.of(PMD_FILE_LISTS_DIR).toAbsolutePath());
+
+            PmdRunner pmdRunner =
+                    new PmdRunner(
+                            PMD_EXECUTABLE,
+                            PMD_RULESET,
+                            PMD_JAVA_VERSION,
+                            Path.of(PMD_REPORTS_DIR).toAbsolutePath()
+                    );
+
+            SmellService smellService =
+                    new SmellService(
+                            PROJECT_NAME,
+                            Path.of(PROJECT_REPO_PATH),
+                            pmdFileListWriter,
+                            pmdRunner
+                    );
+
+            SmellComputationResult smellResult =
+                    smellService.computeSmells(
+                            selectedReleases,
+                            releaseJavaClasses
+                    );
+
+            ClassReleaseSmellCsvWriter.writeClassReleaseSmells(
+                    CLASS_RELEASE_SMELLS_FILE,
+                    smellResult.getSmells()
+            );
+
+            PmdAnalysisErrorCsvWriter.writePmdAnalysisErrors(
+                    PMD_ANALYSIS_ERRORS_FILE,
+                    smellResult.getErrors()
+            );
+
+            System.out.println("File smell classe-release creato: " + CLASS_RELEASE_SMELLS_FILE);
+            System.out.println("File errori PMD creato: " + PMD_ANALYSIS_ERRORS_FILE);
+
+
+            /*
+             * STEP 15:
+             * Merge tra dataset classe-release yes/no e smell PMD.
+             */
+            FinalDatasetWithSmellsCsvWriter.writeFinalDatasetWithSmells(
+                    FINAL_CLASS_RELEASE_LABELS_FILE,
+                    CLASS_RELEASE_SMELLS_FILE,
+                    FINAL_DATASET_WITH_SMELLS_FILE
+            );
+
+            System.out.println("Dataset finale con NSmells creato: "
+                    + FINAL_DATASET_WITH_SMELLS_FILE);
+
 
         } catch (IOException e) {
             System.out.println("Errore durante l'esecuzione del flusso principale.");
