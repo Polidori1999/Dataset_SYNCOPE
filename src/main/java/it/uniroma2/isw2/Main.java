@@ -2,6 +2,8 @@ package it.uniroma2.isw2;
 
 import it.uniroma2.isw2.io.*;
 import it.uniroma2.isw2.labeling.*;
+import it.uniroma2.isw2.metric.ClassReleaseMetric;
+import it.uniroma2.isw2.metric.MetricService;
 import it.uniroma2.isw2.model.*;
 import it.uniroma2.isw2.proportion.*;
 import it.uniroma2.isw2.smell.PmdFileListWriter;
@@ -12,6 +14,7 @@ import it.uniroma2.isw2.utils.ReleaseSelector;
 
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +32,6 @@ public class Main {
     private static final double RELEASES_TO_KEEP = 0.34;
 
 
-
     private static final String FINAL_CLASS_RELEASE_LABELS_FILE =
             PROJECT_NAME + "_FinalClassReleaseLabels.csv";
 
@@ -43,10 +45,8 @@ public class Main {
     private static final String TICKET_BUGGY_CLASSES_FILE =
             PROJECT_NAME + "_TicketBuggyClasses.csv";
 
-    private static final String BUGGY_CLASS_RELEASE_LABELS_FILE =
-            PROJECT_NAME + "_BuggyClassReleaseLabels.csv";
-
-
+    private static final String CLASS_RELEASE_METRICS_FILE =
+            PROJECT_NAME + "_ClassReleaseMetrics.csv";
 
     private static final String FINAL_DATASET_WITH_SMELLS_FILE =
             PROJECT_NAME + "_FinalDatasetWithSmells.csv";
@@ -73,26 +73,19 @@ public class Main {
     private static final String PMD_REPORTS_DIR =
             "target/pmd-reports/" + PROJECT_NAME;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+    private static final String FINAL_METRIC_DATASET_FILE =
+            "dataset_" + PROJECT_NAME + ".csv";
 
 
     public static void main(String[] args) throws IOException {
         System.out.println("Avvio costruzione dataset del progetto " + PROJECT_NAME + ".");
 
+
         try {
+
+            
             /*
+
              * STEP 1:
              * Lettura di tutte le release del progetto.
              */
@@ -160,125 +153,188 @@ public class Main {
             Map<String, String> computedAvByTicketId =
                     ProportionService.buildComputedAvMap(estimatedTickets, allReleases);
             System.out.println("Ticket con ComputedAV costruiti in memoria: " + computedAvByTicketId.size());
+            List<ReleaseJavaClass> releaseJavaClasses = null;
+            if (!csvExists(FINAL_DATASET_WITH_SMELLS_FILE)) {
+                System.out.println("File non esiste Faccio gli step");
+                /*
+                 * STEP 8:
+                 * Ricerca dei fix commit associati ai ticket nel repository Git.
+                 */
+                List<TicketFixCommit> ticketFixCommits =
+                        BuggyClassService.findFixCommits(
+                                estimatedTickets,
+                                PROJECT_REPO_PATH
+                        );
+                TicketFixCommitCsvWriter.writeTicketFixCommits(TICKET_FIX_COMMITS_FILE, ticketFixCommits);
+                System.out.println("File ticket-fix commit creato: " + TICKET_FIX_COMMITS_FILE);
 
-            /*
-             * STEP 8:
-             * Ricerca dei fix commit associati ai ticket nel repository Git.
-             */
-            List<TicketFixCommit> ticketFixCommits =
-                    BuggyClassService.findFixCommits(
-                            estimatedTickets,
-                            PROJECT_REPO_PATH
-                    );
-            TicketFixCommitCsvWriter.writeTicketFixCommits(TICKET_FIX_COMMITS_FILE, ticketFixCommits);
-            System.out.println("File ticket-fix commit creato: " + TICKET_FIX_COMMITS_FILE);
+                /*
+                 * STEP 9:
+                 * Estrazione semplificata delle buggy classes con SZZ.
+                 * Sono considerate solo classi Java di produzione.
+                 */
+                List<TicketBuggyClass> ticketBuggyClasses =
+                        BuggyClassService.extractBuggyClasses(
+                                ticketFixCommits,
+                                PROJECT_REPO_PATH
+                        );
+                TicketBuggyClassCsvWriter.writeTicketBuggyClasses(
+                        TICKET_BUGGY_CLASSES_FILE,
+                        ticketBuggyClasses
+                );
+                System.out.println("File ticket-buggy classes creato: " + TICKET_BUGGY_CLASSES_FILE);
 
-            /*
-             * STEP 9:
-             * Estrazione semplificata delle buggy classes con SZZ.
-             * Sono considerate solo classi Java di produzione.
-             */
-            List<TicketBuggyClass> ticketBuggyClasses =
-                    BuggyClassService.extractBuggyClasses(
-                            ticketFixCommits,
-                            PROJECT_REPO_PATH
-                    );
-            TicketBuggyClassCsvWriter.writeTicketBuggyClasses(
-                    TICKET_BUGGY_CLASSES_FILE,
-                    ticketBuggyClasses
-            );
-            System.out.println("File ticket-buggy classes creato: " + TICKET_BUGGY_CLASSES_FILE);
+                /*
+                 * STEP 10-11:
+                 * Per ogni release selezionata:
+                 * - trova il commit snapshot
+                 * - estrae tutte le classi Java di produzione presenti
+                 */
+                releaseJavaClasses = ReleaseInventoryService.buildReleaseInventory(
+                        PROJECT_NAME,
+                        selectedReleases,
+                        PROJECT_REPO_PATH
+                );
+                System.out.println("Coppie classe-release generate: " + releaseJavaClasses.size());
 
+                /*
+                 * STEP 12-13:
+                 * Costruzione dei positivi e merge finale yes/no
+                 * direttamente dentro FinalDatasetCsvWriter.
+                 */
+                FinalDatasetCsvWriter.writeFinalDataset(
+                        FINAL_CLASS_RELEASE_LABELS_FILE,
+                        releaseJavaClasses,
+                        selectedReleases,
+                        computedAvByTicketId,
+                        ticketBuggyClasses
+                );
+                System.out.println("File finale classe-release yes/no creato: "
+                        + FINAL_CLASS_RELEASE_LABELS_FILE);
+
+                /*
+                 * STEP 14:
+                 * Calcolo degli smell PMD per ogni coppia classe-release.
+                 * PMD viene eseguito sullo snapshot reale di ciascuna release selezionata.
+                 */
+                PmdFileListWriter pmdFileListWriter =
+                        new PmdFileListWriter(Path.of(PMD_FILE_LISTS_DIR).toAbsolutePath());
+
+                PmdRunner pmdRunner =
+                        new PmdRunner(
+                                PMD_EXECUTABLE,
+                                PMD_RULESET,
+                                PMD_JAVA_VERSION,
+                                Path.of(PMD_REPORTS_DIR).toAbsolutePath()
+                        );
+
+                SmellService smellService =
+                        new SmellService(
+                                PROJECT_NAME,
+                                Path.of(PROJECT_REPO_PATH),
+                                pmdFileListWriter,
+                                pmdRunner
+                        );
+
+                SmellComputationResult smellResult =
+                        smellService.computeSmells(
+                                selectedReleases,
+                                releaseJavaClasses
+                        );
+
+                ClassReleaseSmellCsvWriter.writeClassReleaseSmells(
+                        CLASS_RELEASE_SMELLS_FILE,
+                        smellResult.getSmells()
+                );
+
+                PmdAnalysisErrorCsvWriter.writePmdAnalysisErrors(
+                        PMD_ANALYSIS_ERRORS_FILE,
+                        smellResult.getErrors()
+                );
+
+                System.out.println("File smell classe-release creato: " + CLASS_RELEASE_SMELLS_FILE);
+                System.out.println("File errori PMD creato: " + PMD_ANALYSIS_ERRORS_FILE);
+
+
+                /*
+                 * STEP 15:
+                 * Merge tra dataset classe-release yes/no e smell PMD.
+                 */
+                FinalDatasetWithSmellsCsvWriter.writeFinalDatasetWithSmells(
+                        FINAL_CLASS_RELEASE_LABELS_FILE,
+                        CLASS_RELEASE_SMELLS_FILE,
+                        FINAL_DATASET_WITH_SMELLS_FILE
+                );
+
+                System.out.println("Dataset finale con NSmells creato: "
+                        + FINAL_DATASET_WITH_SMELLS_FILE);
+
+            }
             /*
              * STEP 10-11:
              * Per ogni release selezionata:
              * - trova il commit snapshot
              * - estrae tutte le classi Java di produzione presenti
              */
-            List<ReleaseJavaClass> releaseJavaClasses =
-                    ReleaseInventoryService.buildReleaseInventory(
-                            PROJECT_NAME,
-                            selectedReleases,
-                            PROJECT_REPO_PATH
-                    );
+            releaseJavaClasses = ReleaseInventoryService.buildReleaseInventory(
+                    PROJECT_NAME,
+                    selectedReleases,
+                    PROJECT_REPO_PATH
+            );
             System.out.println("Coppie classe-release generate: " + releaseJavaClasses.size());
 
             /*
-             * STEP 12-13:
-             * Costruzione dei positivi e merge finale yes/no
-             * direttamente dentro FinalDatasetCsvWriter.
+             * STEP 16:
+             * Calcolo delle metriche classe-release.
              */
-            FinalDatasetCsvWriter.writeFinalDataset(
-                    FINAL_CLASS_RELEASE_LABELS_FILE,
-                    releaseJavaClasses,
-                    selectedReleases,
-                    computedAvByTicketId,
-                    ticketBuggyClasses
-            );
-            System.out.println("File finale classe-release yes/no creato: "
-                    + FINAL_CLASS_RELEASE_LABELS_FILE);
+            Set<String> fixCommitHashes =
+                    TicketFixCommitCsvReader.loadFixCommitHashes(TICKET_FIX_COMMITS_FILE);
 
-            /*
-             * STEP 14:
-             * Calcolo degli smell PMD per ogni coppia classe-release.
-             * PMD viene eseguito sullo snapshot reale di ciascuna release selezionata.
-             */
-            PmdFileListWriter pmdFileListWriter =
-                    new PmdFileListWriter(Path.of(PMD_FILE_LISTS_DIR).toAbsolutePath());
+            Map<String, Integer> smellsByClassRelease =
+                    ClassReleaseSmellCsvReader.loadSmellsByClassRelease(CLASS_RELEASE_SMELLS_FILE);
 
-            PmdRunner pmdRunner =
-                    new PmdRunner(
-                            PMD_EXECUTABLE,
-                            PMD_RULESET,
-                            PMD_JAVA_VERSION,
-                            Path.of(PMD_REPORTS_DIR).toAbsolutePath()
-                    );
-
-            SmellService smellService =
-                    new SmellService(
+            MetricService metricService =
+                    new MetricService(
                             PROJECT_NAME,
                             Path.of(PROJECT_REPO_PATH),
-                            pmdFileListWriter,
-                            pmdRunner
+                            fixCommitHashes
                     );
 
-            SmellComputationResult smellResult =
-                    smellService.computeSmells(
+            List<ClassReleaseMetric> classReleaseMetrics =
+                    metricService.computeMetrics(
                             selectedReleases,
-                            releaseJavaClasses
+                            releaseJavaClasses,
+                            smellsByClassRelease
                     );
 
-            ClassReleaseSmellCsvWriter.writeClassReleaseSmells(
-                    CLASS_RELEASE_SMELLS_FILE,
-                    smellResult.getSmells()
+            ClassReleaseMetricCsvWriter.writeClassReleaseMetrics(
+                    CLASS_RELEASE_METRICS_FILE,
+                    classReleaseMetrics
             );
-
-            PmdAnalysisErrorCsvWriter.writePmdAnalysisErrors(
-                    PMD_ANALYSIS_ERRORS_FILE,
-                    smellResult.getErrors()
-            );
-
-            System.out.println("File smell classe-release creato: " + CLASS_RELEASE_SMELLS_FILE);
-            System.out.println("File errori PMD creato: " + PMD_ANALYSIS_ERRORS_FILE);
-
-
             /*
-             * STEP 15:
-             * Merge tra dataset classe-release yes/no e smell PMD.
+             * STEP 17:
+             * Merge finale tra metriche classe-release e label buggy yes/no.
              */
-            FinalDatasetWithSmellsCsvWriter.writeFinalDatasetWithSmells(
+            FinalMetricDatasetCsvWriter.writeFinalMetricDataset(
+                    CLASS_RELEASE_METRICS_FILE,
                     FINAL_CLASS_RELEASE_LABELS_FILE,
-                    CLASS_RELEASE_SMELLS_FILE,
-                    FINAL_DATASET_WITH_SMELLS_FILE
+                    FINAL_METRIC_DATASET_FILE
             );
 
-            System.out.println("Dataset finale con NSmells creato: "
-                    + FINAL_DATASET_WITH_SMELLS_FILE);
+            System.out.println("Dataset finale metriche + label creato: "
+                    + FINAL_METRIC_DATASET_FILE);
 
-
+            System.out.println("File metriche classe-release creato: "
+                    + CLASS_RELEASE_METRICS_FILE);
         } catch (IOException e) {
             System.out.println("Errore durante l'esecuzione del flusso principale.");
             e.printStackTrace();
         }
+    }
+
+
+    private static boolean csvExists(String filePath) throws IOException {
+        Path path = Path.of(filePath);
+        return Files.isRegularFile(path) && Files.size(path) > 0;
     }
 }
