@@ -14,6 +14,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>17</maven.compiler.release>
+    <sonar.organization>polidori1999</sonar.organization>
   </properties>
 
   <dependencyManagement>
@@ -36,6 +37,12 @@
     </dependency>
 
     <dependency>
+      <groupId>com.github.javaparser</groupId>
+      <artifactId>javaparser-core</artifactId>
+      <version>3.26.4</version>
+    </dependency>
+
+    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-api</artifactId>
       <scope>test</scope>
@@ -51,6 +58,51 @@
   <build>
     <pluginManagement>
       <plugins>
+        <!-- Unit test: eseguiti con mvn test -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <configuration>
+            <redirectTestOutputToFile>true</redirectTestOutputToFile>
+            <encoding>utf-8</encoding>
+            <runOrder>alphabetical</runOrder>
+            <includes>
+              <include>**/*Test.java</include>
+              <include>**/*Tests.java</include>
+              <include>**/*TestCase.java</include>
+            </includes>
+            <excludes>
+              <exclude>**/*IT.java</exclude>
+              <exclude>**/*ITCase.java</exclude>
+              <exclude>**/IT*.java</exclude>
+            </excludes>
+          </configuration>
+        </plugin>
+
+        <!-- Integration test: eseguiti con mvn verify -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <configuration>
+            <redirectTestOutputToFile>true</redirectTestOutputToFile>
+            <encoding>utf-8</encoding>
+            <runOrder>alphabetical</runOrder>
+            <includes>
+              <include>**/*IT.java</include>
+              <include>**/*ITCase.java</include>
+              <include>**/IT*.java</include>
+            </includes>
+          </configuration>
+          <executions>
+            <execution>
+              <id>integration-tests</id>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
         <plugin>
           <artifactId>maven-clean-plugin</artifactId>
           <version>3.4.0</version>
