@@ -71,15 +71,17 @@ public class Milestone4ClassSelector {
     private static final String PMD_REPORTS_DIR =
             "target/pmd-reports/" + PROJECT_NAME + "-milestone4";
 
-    private static final int MIN_NSMELLS = 5;
-    private static final int MIN_LOC = 100;
+    private static final int MIN_NSMELLS = 4;
+    private static final int MIN_LOC = 150;
     private static final int MIN_METHODS = 7;
+    private static final int MIN_PUBLIC_METHODS = 2;
     private static final int MIN_COMPLEXITY = 5;
 
     private static final List<String> GUI_KEYWORDS = List.of(
             "gui", "ui", "view", "window", "panel", "button", "dialog",
             "frame", "screen", "page", "component", "widget", "swing",
-            "awt", "javafx", "servlet", "controller", "web", "template"
+            "awt", "javafx", "servlet", "controller", "web", "template",
+            "console", "wizard", "wicket", "ajax", "markup", "directory", "selection"
     );
 
     private static final List<String> SIMPLE_ROLE_KEYWORDS = List.of(
@@ -273,6 +275,7 @@ public class Milestone4ClassSelector {
                     nSmells,
                     stats.sizeLoc,
                     stats.nom,
+                    stats.publicMethods,
                     stats.avgMethodSize,
                     stats.cycloComplexity,
                     stats.fanOut,
@@ -299,7 +302,7 @@ public class Milestone4ClassSelector {
 
     private static SourceStats computeSourceStats(Path absoluteClassPath) throws IOException {
         if (!Files.exists(absoluteClassPath)) {
-            return new SourceStats(0, 0, 0.0, 0, 0, false, false, false, false);
+            return new SourceStats(0, 0, 0, 0.0, 0, 0, false, false, false, false);
         }
 
         String source = Files.readString(absoluteClassPath, StandardCharsets.UTF_8);
@@ -310,10 +313,15 @@ public class Milestone4ClassSelector {
 
             int methods = cu.findAll(MethodDeclaration.class).size();
             int constructors = cu.findAll(ConstructorDeclaration.class).size();
+            int publicMethods = (int) cu.findAll(MethodDeclaration.class).stream()
+                    .filter(MethodDeclaration::isPublic)
+                    .count();
             int nom = methods + constructors;
 
             int cycloComplexity = computeCyclomaticComplexity(cu);
             int fanOut = cu.getImports().size();
+
+
 
             double avgMethodSize = nom == 0
                     ? 0.0
@@ -332,6 +340,7 @@ public class Milestone4ClassSelector {
             return new SourceStats(
                     sizeLoc,
                     nom,
+                    publicMethods,
                     avgMethodSize,
                     cycloComplexity,
                     fanOut,
@@ -345,7 +354,7 @@ public class Milestone4ClassSelector {
             int nom = countMethodsFallback(source);
             int cycloComplexity = countCyclomaticComplexityFallback(source);
             int fanOut = countImportsFallback(source);
-
+            int publicMethods = countPublicMethodsFallback(source);
             double avgMethodSize = nom == 0
                     ? 0.0
                     : (double) sizeLoc / nom;
@@ -358,6 +367,7 @@ public class Milestone4ClassSelector {
             return new SourceStats(
                     sizeLoc,
                     nom,
+                    publicMethods,
                     avgMethodSize,
                     cycloComplexity,
                     fanOut,
@@ -367,6 +377,19 @@ public class Milestone4ClassSelector {
                     isAnnotation
             );
         }
+    }
+    private static int countPublicMethodsFallback(String source) {
+        int count = 0;
+
+        for (String line : source.split("\\R")) {
+            String trimmed = line.trim();
+
+            if (trimmed.startsWith("public ") && looksLikeMethodFallback(trimmed)) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static int countLoc(String source) {
@@ -550,6 +573,7 @@ public class Milestone4ClassSelector {
     private static final class SourceStats {
         private final int sizeLoc;
         private final int nom;
+        private final int publicMethods;
         private final double avgMethodSize;
         private final int cycloComplexity;
         private final int fanOut;
@@ -561,6 +585,7 @@ public class Milestone4ClassSelector {
         private SourceStats(
                 int sizeLoc,
                 int nom,
+                int publicMethods,
                 double avgMethodSize,
                 int cycloComplexity,
                 int fanOut,
@@ -571,6 +596,7 @@ public class Milestone4ClassSelector {
         ) {
             this.sizeLoc = sizeLoc;
             this.nom = nom;
+            this.publicMethods = publicMethods;
             this.avgMethodSize = avgMethodSize;
             this.cycloComplexity = cycloComplexity;
             this.fanOut = fanOut;
@@ -594,6 +620,9 @@ public class Milestone4ClassSelector {
 
         if (rankedClass.nom < MIN_METHODS) {
             rankedClass.discardReasons.add("FEW_METHODS<" + MIN_METHODS);
+        }
+        if (rankedClass.publicMethods < MIN_PUBLIC_METHODS) {
+            rankedClass.discardReasons.add("FEW_PUBLIC_METHODS<" + MIN_PUBLIC_METHODS);
         }
 
         if (rankedClass.cycloComplexity < MIN_COMPLEXITY) {
@@ -684,6 +713,7 @@ public class Milestone4ClassSelector {
                     "NSmells",
                     "SIZE_LOC",
                     "NOM",
+                    "PUBLIC_METHODS",
                     "AVG_METHOD_SIZE",
                     "CYCLO_COMPLEXITY",
                     "FAN_OUT",
@@ -709,6 +739,7 @@ public class Milestone4ClassSelector {
                         csv(rankedClass.nSmells),
                         csv(rankedClass.sizeLoc),
                         csv(rankedClass.nom),
+                        csv(rankedClass.publicMethods),
                         csv(rankedClass.avgMethodSize),
                         csv(rankedClass.cycloComplexity),
                         csv(rankedClass.fanOut),
@@ -762,6 +793,7 @@ public class Milestone4ClassSelector {
                                 + " | NSmells=" + c.nSmells
                                 + " | LOC=" + c.sizeLoc
                                 + " | NOM=" + c.nom
+                                + " | PUBLIC=" + c.publicMethods
                                 + " | CYCLO=" + c.cycloComplexity
                 ));
 
@@ -775,6 +807,7 @@ public class Milestone4ClassSelector {
                             + " | NSmells=" + c.nSmells
                             + " | LOC=" + c.sizeLoc
                             + " | NOM=" + c.nom
+                            + " | PUBLIC=" + c.publicMethods
             );
         }
     }
@@ -821,6 +854,7 @@ public class Milestone4ClassSelector {
         private final boolean isInterface;
         private final boolean isEnum;
         private final boolean isAnnotation;
+        private final int publicMethods;
 
         private RankedClass(
                 String releaseId,
@@ -830,6 +864,7 @@ public class Milestone4ClassSelector {
                 int nSmells,
                 int sizeLoc,
                 int nom,
+                int publicMethods,
                 double avgMethodSize,
                 int cycloComplexity,
                 int fanOut,
@@ -846,6 +881,7 @@ public class Milestone4ClassSelector {
             this.nSmells = nSmells;
             this.sizeLoc = sizeLoc;
             this.nom = nom;
+            this.publicMethods = publicMethods;
             this.avgMethodSize = avgMethodSize;
             this.cycloComplexity = cycloComplexity;
             this.fanOut = fanOut;
