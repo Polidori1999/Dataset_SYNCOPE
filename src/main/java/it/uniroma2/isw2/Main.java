@@ -19,12 +19,16 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Classe principale del progetto.
  * Coordina le fasi iniziali della costruzione del dataset.
  */
 public class Main {
+
+    private static final Logger LOGGER = Logger.getLogger(Main.class.getName());
 
     private static final String PROJECT_NAME = "SYNCOPE";
     private static final String RELEASES_FILE = PROJECT_NAME + "VersionInfo.csv";
@@ -37,7 +41,7 @@ public class Main {
 
 
     private static final String PROJECT_REPO_PATH =
-            "/home/leonardo/uni/isw2/syncope";
+            System.getProperty("project.repo.path", "/home/leonardo/uni/isw2/syncope");
 
     private static final String TICKET_FIX_COMMITS_FILE =
             PROJECT_NAME + "_TicketFixCommits.csv";
@@ -78,7 +82,8 @@ public class Main {
 
 
     public static void main(String[] args) throws IOException {
-        System.out.println("Avvio costruzione dataset del progetto " + PROJECT_NAME + ".");
+        LOGGER.log(Level.INFO, "Avvio costruzione dataset del progetto {0}.", PROJECT_NAME);
+
 
 
         try {
@@ -90,7 +95,7 @@ public class Main {
              * Lettura di tutte le release del progetto.
              */
             List<Release> allReleases = ReleaseCsvReader.loadReleases(RELEASES_FILE);
-            System.out.println("Release lette: " + allReleases.size());
+            LOGGER.log(Level.INFO, "Release lette: {0}", allReleases.size());
 
             /*
              * STEP 1.1:
@@ -99,14 +104,15 @@ public class Main {
              */
             List<Release> selectedReleases =
                     ReleaseSelector.selectInitialReleases(allReleases, RELEASES_TO_KEEP);
-            System.out.println("Release selezionate per il dataset finale: " + selectedReleases.size());
+            LOGGER.log(Level.INFO, "Release selezionate per il dataset finale: {0}", selectedReleases.size());
+
 
             /*
              * STEP 2:
              * Lettura dei ticket validi.
              */
             List<Ticket> tickets = TicketCsvReader.loadTickets(TICKETS_FILE);
-            System.out.println("Ticket letti: " + tickets.size());
+            LOGGER.log(Level.INFO, "Ticket letti: {0}", tickets.size());
 
             /*
              * STEP 3:
@@ -115,7 +121,7 @@ public class Main {
              */
             List<EnhancedTicket> enhancedTickets =
                     TicketVersionEnricher.enrichTickets(tickets, allReleases);
-            System.out.println("ticket arricchiti creati");
+            LOGGER.info("ticket arricchiti creati");
 
             /*
              * STEP 4:
@@ -123,7 +129,7 @@ public class Main {
              */
             List<EnhancedTicket> avBasedTickets =
                     AffectedVersionIVResolver.assignInitialIVFromAV(enhancedTickets, allReleases);
-            System.out.println("ticket con IV iniziale da AV creati");
+            LOGGER.info("ticket con IV iniziale da AV creati");
 
             /*
              * STEP 5:
@@ -131,7 +137,7 @@ public class Main {
              */
             double proportion =
                     ProportionService.calculateAverageProportion(avBasedTickets, allReleases);
-            System.out.println("Proportion media calcolata: " + proportion);
+            LOGGER.log(Level.INFO, "Proportion media calcolata: {0}", proportion);
 
             /*
              * STEP 6:
@@ -141,9 +147,9 @@ public class Main {
                     ProportionService.estimateMissingInjectedVersions(
                             avBasedTickets, allReleases, proportion
                     );
-            System.out.println("ticket con IV stimata creato");
+            LOGGER.info("ticket con IV stimata creato");
 
-            System.out.println("Selezione release + fase AV -> IV -> P completate con successo.");
+            LOGGER.info("Selezione release + fase AV -> IV -> P completate con successo.");
 
             /*
              * STEP 7:
@@ -152,10 +158,11 @@ public class Main {
              */
             Map<String, String> computedAvByTicketId =
                     ProportionService.buildComputedAvMap(estimatedTickets, allReleases);
-            System.out.println("Ticket con ComputedAV costruiti in memoria: " + computedAvByTicketId.size());
+            LOGGER.log(Level.INFO, "Ticket con ComputedAV costruiti in memoria: {0}", computedAvByTicketId.size());
+
             List<ReleaseJavaClass> releaseJavaClasses = null;
             if (!csvExists(FINAL_DATASET_WITH_SMELLS_FILE)) {
-                System.out.println("File non esiste Faccio gli step");
+                LOGGER.info("File non esiste Faccio gli step");
                 /*
                  * STEP 8:
                  * Ricerca dei fix commit associati ai ticket nel repository Git.
@@ -166,7 +173,7 @@ public class Main {
                                 PROJECT_REPO_PATH
                         );
                 TicketFixCommitCsvWriter.writeTicketFixCommits(TICKET_FIX_COMMITS_FILE, ticketFixCommits);
-                System.out.println("File ticket-fix commit creato: " + TICKET_FIX_COMMITS_FILE);
+                LOGGER.log(Level.INFO, "File ticket-fix commit creato: {0}", TICKET_FIX_COMMITS_FILE);
 
                 /*
                  * STEP 9:
@@ -182,7 +189,8 @@ public class Main {
                         TICKET_BUGGY_CLASSES_FILE,
                         ticketBuggyClasses
                 );
-                System.out.println("File ticket-buggy classes creato: " + TICKET_BUGGY_CLASSES_FILE);
+                LOGGER.log(Level.INFO, "File ticket-buggy classes creato: {0}", TICKET_BUGGY_CLASSES_FILE);
+
 
                 /*
                  * STEP 10-11:
@@ -195,7 +203,7 @@ public class Main {
                         selectedReleases,
                         PROJECT_REPO_PATH
                 );
-                System.out.println("Coppie classe-release generate: " + releaseJavaClasses.size());
+                LOGGER.log(Level.INFO, "Coppie classe-release generate: {0}", releaseJavaClasses.size());
 
                 /*
                  * STEP 12-13:
@@ -209,8 +217,8 @@ public class Main {
                         computedAvByTicketId,
                         ticketBuggyClasses
                 );
-                System.out.println("File finale classe-release yes/no creato: "
-                        + FINAL_CLASS_RELEASE_LABELS_FILE);
+                LOGGER.log(Level.INFO, "File finale classe-release yes/no creato: {0}", FINAL_CLASS_RELEASE_LABELS_FILE);
+
 
                 /*
                  * STEP 14:
@@ -252,8 +260,9 @@ public class Main {
                         smellResult.getErrors()
                 );
 
-                System.out.println("File smell classe-release creato: " + CLASS_RELEASE_SMELLS_FILE);
-                System.out.println("File errori PMD creato: " + PMD_ANALYSIS_ERRORS_FILE);
+                LOGGER.log(Level.INFO, "File smell classe-release creato: {0}", CLASS_RELEASE_SMELLS_FILE);
+
+                LOGGER.log(Level.INFO, "File errori PMD creato: {0}", PMD_ANALYSIS_ERRORS_FILE);
 
 
                 /*
@@ -266,8 +275,8 @@ public class Main {
                         FINAL_DATASET_WITH_SMELLS_FILE
                 );
 
-                System.out.println("Dataset finale con NSmells creato: "
-                        + FINAL_DATASET_WITH_SMELLS_FILE);
+                LOGGER.log(Level.INFO, "Dataset finale con NSmells creato: {0}", FINAL_DATASET_WITH_SMELLS_FILE);
+
 
             }
             /*
@@ -281,7 +290,7 @@ public class Main {
                     selectedReleases,
                     PROJECT_REPO_PATH
             );
-            System.out.println("Coppie classe-release generate: " + releaseJavaClasses.size());
+            LOGGER.log(Level.INFO, "Coppie classe-release generate: {0}", releaseJavaClasses.size());
 
             /*
              * STEP 16:
@@ -321,14 +330,12 @@ public class Main {
                     FINAL_METRIC_DATASET_FILE
             );
 
-            System.out.println("Dataset finale metriche + label creato: "
-                    + FINAL_METRIC_DATASET_FILE);
+            LOGGER.log(Level.INFO, "Dataset finale metriche + label creato: {0}", FINAL_METRIC_DATASET_FILE);
 
-            System.out.println("File metriche classe-release creato: "
-                    + CLASS_RELEASE_METRICS_FILE);
+
+            LOGGER.log(Level.INFO, "File metriche classe-release creato: {0}", CLASS_RELEASE_METRICS_FILE);
         } catch (IOException e) {
-            System.out.println("Errore durante l'esecuzione del flusso principale.");
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Errore durante l'esecuzione del flusso principale.", e);
         }
     }
 
