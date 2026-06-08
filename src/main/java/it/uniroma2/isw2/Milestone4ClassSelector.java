@@ -4,13 +4,10 @@ import com.github.javaparser.ast.body.*;
 import it.uniroma2.isw2.io.CsvUtils;
 import it.uniroma2.isw2.io.ReleaseCsvReader;
 import it.uniroma2.isw2.labeling.ReleaseInventoryService;
-import it.uniroma2.isw2.metric.ClassReleaseMetric;
-import it.uniroma2.isw2.metric.MetricService;
 import it.uniroma2.isw2.model.Release;
 import it.uniroma2.isw2.model.ReleaseJavaClass;
 import it.uniroma2.isw2.smell.ClassReleaseSmell;
 import it.uniroma2.isw2.smell.PmdFileListWriter;
-import it.uniroma2.isw2.smell.PmdRunResult;
 import it.uniroma2.isw2.smell.PmdRunner;
 import it.uniroma2.isw2.smell.SmellComputationResult;
 import it.uniroma2.isw2.smell.SmellService;
@@ -39,17 +36,22 @@ import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.WhileStmt;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 
 
 public class Milestone4ClassSelector {
+
+    private static final Logger LOGGER =
+            Logger.getLogger(Milestone4ClassSelector.class.getName());
 
     private static final String PROJECT_NAME = "SYNCOPE";
 
     private static final String RELEASES_FILE = PROJECT_NAME + "VersionInfo.csv";
 
     private static final String PROJECT_REPO_PATH =
-            "/home/leonardo/uni/syncope";
+            System.getProperty("project.repo.path", "/home/leonardo/uni/syncope");
 
     private static final String OUTPUT_DIR =
             "Classi";
@@ -100,11 +102,11 @@ public class Milestone4ClassSelector {
         List<Release> allReleases = ReleaseCsvReader.loadReleases(RELEASES_FILE);
         Release latestRelease = findLatestRelease(allReleases);
 
-        System.out.println("Ultima release selezionata:");
-        System.out.println("- Index: " + latestRelease.getIndex());
-        System.out.println("- ID: " + latestRelease.getVersionId());
-        System.out.println("- Name: " + latestRelease.getVersionName());
-        System.out.println("- Date: " + latestRelease.getDate());
+        LOGGER.info("Ultima release selezionata:");
+        LOGGER.log(Level.INFO, "- Index: {0}", latestRelease.getIndex());
+        LOGGER.log(Level.INFO, "- ID: {0}", latestRelease.getVersionId());
+        LOGGER.log(Level.INFO, "- Name: {0}", latestRelease.getVersionName());
+        LOGGER.log(Level.INFO, "- Date: {0}", latestRelease.getDate());
 
         List<Release> releasesForMilestone4 = List.of(latestRelease);
 
@@ -115,8 +117,9 @@ public class Milestone4ClassSelector {
                         PROJECT_REPO_PATH
                 );
 
-        System.out.println("Classi Java di produzione nell'ultima release: "
-                + latestReleaseClasses.size());
+        LOGGER.log(Level.INFO,
+                "Classi Java di produzione nell''ultima release: {0}",
+                latestReleaseClasses.size());
 
         SmellComputationResult smellResult =
                 computeLatestReleaseSmells(releasesForMilestone4, latestReleaseClasses);
@@ -249,8 +252,9 @@ public class Milestone4ClassSelector {
             processed++;
 
             if (processed % 100 == 0) {
-                System.out.println("Metriche leggere calcolate per "
-                        + processed + "/" + latestReleaseClasses.size() + " classi...");
+                LOGGER.log(Level.INFO,
+                        "Metriche leggere calcolate per {0}/{1} classi...",
+                        new Object[]{processed, latestReleaseClasses.size()});
             }
 
             String classPath = normalizePath(javaClass.getClassPath());
@@ -267,24 +271,24 @@ public class Milestone4ClassSelector {
                     ? 0.0
                     : (double) nSmells / stats.sizeLoc;
 
-            result.add(new RankedClass(
-                    latestRelease.getVersionId(),
-                    latestRelease.getVersionName(),
-                    classPath,
-                    toQualifiedName(classPath),
-                    nSmells,
-                    stats.sizeLoc,
-                    stats.nom,
-                    stats.publicMethods,
-                    stats.avgMethodSize,
-                    stats.cycloComplexity,
-                    stats.fanOut,
-                    smellDensity,
-                    stats.isAbstract,
-                    stats.isInterface,
-                    stats.isEnum,
-                    stats.isAnnotation
-            ));
+            result.add(RankedClass.builder()
+                    .releaseId(latestRelease.getVersionId())
+                    .releaseName(latestRelease.getVersionName())
+                    .classPath(classPath)
+                    .qualifiedName(toQualifiedName(classPath))
+                    .nSmells(nSmells)
+                    .sizeLoc(stats.sizeLoc)
+                    .nom(stats.nom)
+                    .publicMethods(stats.publicMethods)
+                    .avgMethodSize(stats.avgMethodSize)
+                    .cycloComplexity(stats.cycloComplexity)
+                    .fanOut(stats.fanOut)
+                    .smellDensity(smellDensity)
+                    .isAbstract(stats.isAbstract)
+                    .isInterface(stats.isInterface)
+                    .isEnum(stats.isEnum)
+                    .isAnnotation(stats.isAnnotation)
+                    .build());
         }
 
         return result;
@@ -302,7 +306,7 @@ public class Milestone4ClassSelector {
 
     private static SourceStats computeSourceStats(Path absoluteClassPath) throws IOException {
         if (!Files.exists(absoluteClassPath)) {
-            return new SourceStats(0, 0, 0, 0.0, 0, 0, false, false, false, false);
+            return SourceStats.builder().build();
         }
 
         String source = Files.readString(absoluteClassPath, StandardCharsets.UTF_8);
@@ -337,18 +341,18 @@ public class Milestone4ClassSelector {
 
             boolean isAnnotation = !cu.findAll(AnnotationDeclaration.class).isEmpty();
 
-            return new SourceStats(
-                    sizeLoc,
-                    nom,
-                    publicMethods,
-                    avgMethodSize,
-                    cycloComplexity,
-                    fanOut,
-                    isAbstract,
-                    isInterface,
-                    isEnum,
-                    isAnnotation
-            );
+            return SourceStats.builder()
+                    .sizeLoc(sizeLoc)
+                    .nom(nom)
+                    .publicMethods(publicMethods)
+                    .avgMethodSize(avgMethodSize)
+                    .cycloComplexity(cycloComplexity)
+                    .fanOut(fanOut)
+                    .isAbstract(isAbstract)
+                    .isInterface(isInterface)
+                    .isEnum(isEnum)
+                    .isAnnotation(isAnnotation)
+                    .build();
 
         } catch (Exception e) {
             int nom = countMethodsFallback(source);
@@ -364,18 +368,18 @@ public class Milestone4ClassSelector {
             boolean isEnum = source.contains(" enum ");
             boolean isAnnotation = source.contains("@interface ");
 
-            return new SourceStats(
-                    sizeLoc,
-                    nom,
-                    publicMethods,
-                    avgMethodSize,
-                    cycloComplexity,
-                    fanOut,
-                    isAbstract,
-                    isInterface,
-                    isEnum,
-                    isAnnotation
-            );
+            return SourceStats.builder()
+                    .sizeLoc(sizeLoc)
+                    .nom(nom)
+                    .publicMethods(publicMethods)
+                    .avgMethodSize(avgMethodSize)
+                    .cycloComplexity(cycloComplexity)
+                    .fanOut(fanOut)
+                    .isAbstract(isAbstract)
+                    .isInterface(isInterface)
+                    .isEnum(isEnum)
+                    .isAnnotation(isAnnotation)
+                    .build();
         }
     }
     private static int countPublicMethodsFallback(String source) {
@@ -407,56 +411,127 @@ public class Milestone4ClassSelector {
 
     private static String removeComments(String source) {
         StringBuilder result = new StringBuilder();
+        CommentScanState state = new CommentScanState();
 
-        boolean inBlockComment = false;
-        boolean inLineComment = false;
-        boolean inString = false;
-        boolean inChar = false;
+        while (state.index < source.length()) {
+            char current = source.charAt(state.index);
+            char next = nextChar(source, state.index);
 
-        for (int i = 0; i < source.length(); i++) {
-            char current = source.charAt(i);
-            char next = i + 1 < source.length() ? source.charAt(i + 1) : '\0';
-
-            if (inLineComment) {
-                if (current == '\n' || current == '\r') {
-                    inLineComment = false;
-                    result.append(current);
-                }
-                continue;
-            }
-
-            if (inBlockComment) {
-                if (current == '*' && next == '/') {
-                    inBlockComment = false;
-                    i++;
-                }
-                continue;
-            }
-
-            if (!inString && !inChar && current == '/' && next == '/') {
-                inLineComment = true;
-                i++;
-                continue;
-            }
-
-            if (!inString && !inChar && current == '/' && next == '*') {
-                inBlockComment = true;
-                i++;
-                continue;
-            }
-
-            if (!inChar && current == '"' && !isEscaped(source, i)) {
-                inString = !inString;
-            }
-
-            if (!inString && current == '\'' && !isEscaped(source, i)) {
-                inChar = !inChar;
-            }
-
-            result.append(current);
+            processCharacter(source, result, state, current, next);
         }
 
         return result.toString();
+    }
+    private static void processCharacter(
+            String source,
+            StringBuilder result,
+            CommentScanState state,
+            char current,
+            char next
+    ) {
+        if (state.inLineComment) {
+            handleLineComment(result, state, current);
+        } else if (state.inBlockComment) {
+            handleBlockComment(state, current, next);
+        } else {
+            handleCodeCharacter(source, result, state, current, next);
+        }
+    }
+
+    private static void handleLineComment(
+            StringBuilder result,
+            CommentScanState state,
+            char current
+    ) {
+        if (isNewLine(current)) {
+            state.inLineComment = false;
+            result.append(current);
+        }
+
+        state.index++;
+    }
+
+    private static void handleBlockComment(
+            CommentScanState state,
+            char current,
+            char next
+    ) {
+        if (isBlockCommentEnd(current, next)) {
+            state.inBlockComment = false;
+            state.index += 2;
+        } else {
+            state.index++;
+        }
+    }
+
+    private static void handleCodeCharacter(
+            String source,
+            StringBuilder result,
+            CommentScanState state,
+            char current,
+            char next
+    ) {
+        if (isLineCommentStart(state, current, next)) {
+            state.inLineComment = true;
+            state.index += 2;
+        } else if (isBlockCommentStart(state, current, next)) {
+            state.inBlockComment = true;
+            state.index += 2;
+        } else {
+            updateStringAndCharState(source, state, current);
+            result.append(current);
+            state.index++;
+        }
+    }
+
+    private static void updateStringAndCharState(
+            String source,
+            CommentScanState state,
+            char current
+    ) {
+        if (!state.inChar && current == '"' && !isEscaped(source, state.index)) {
+            state.inString = !state.inString;
+        }
+
+        if (!state.inString && current == '\'' && !isEscaped(source, state.index)) {
+            state.inChar = !state.inChar;
+        }
+    }
+
+    private static boolean isLineCommentStart(
+            CommentScanState state,
+            char current,
+            char next
+    ) {
+        return !state.inString && !state.inChar && current == '/' && next == '/';
+    }
+
+    private static boolean isBlockCommentStart(
+            CommentScanState state,
+            char current,
+            char next
+    ) {
+        return !state.inString && !state.inChar && current == '/' && next == '*';
+    }
+
+    private static boolean isBlockCommentEnd(char current, char next) {
+        return current == '*' && next == '/';
+    }
+
+    private static boolean isNewLine(char current) {
+        return current == '\n' || current == '\r';
+    }
+
+    private static char nextChar(String source, int index) {
+        return index + 1 < source.length() ? source.charAt(index + 1) : '\0';
+    }
+
+    private static final class CommentScanState {
+        private int index;
+        private boolean inBlockComment;
+        private boolean inLineComment;
+        private boolean inString;
+        private boolean inChar;
     }
 
     private static boolean isEscaped(String source, int index) {
@@ -582,28 +657,88 @@ public class Milestone4ClassSelector {
         private final boolean isEnum;
         private final boolean isAnnotation;
 
-        private SourceStats(
-                int sizeLoc,
-                int nom,
-                int publicMethods,
-                double avgMethodSize,
-                int cycloComplexity,
-                int fanOut,
-                boolean isAbstract,
-                boolean isInterface,
-                boolean isEnum,
-                boolean isAnnotation
-        ) {
-            this.sizeLoc = sizeLoc;
-            this.nom = nom;
-            this.publicMethods = publicMethods;
-            this.avgMethodSize = avgMethodSize;
-            this.cycloComplexity = cycloComplexity;
-            this.fanOut = fanOut;
-            this.isAbstract = isAbstract;
-            this.isInterface = isInterface;
-            this.isEnum = isEnum;
-            this.isAnnotation = isAnnotation;
+        private SourceStats(Builder builder) {
+            this.sizeLoc = builder.sizeLoc;
+            this.nom = builder.nom;
+            this.publicMethods = builder.publicMethods;
+            this.avgMethodSize = builder.avgMethodSize;
+            this.cycloComplexity = builder.cycloComplexity;
+            this.fanOut = builder.fanOut;
+            this.isAbstract = builder.isAbstract;
+            this.isInterface = builder.isInterface;
+            this.isEnum = builder.isEnum;
+            this.isAnnotation = builder.isAnnotation;
+        }
+
+        private static Builder builder() {
+            return new Builder();
+        }
+
+        private static final class Builder {
+            private int sizeLoc;
+            private int nom;
+            private int publicMethods;
+            private double avgMethodSize;
+            private int cycloComplexity;
+            private int fanOut;
+            private boolean isAbstract;
+            private boolean isInterface;
+            private boolean isEnum;
+            private boolean isAnnotation;
+
+            private Builder sizeLoc(int value) {
+                this.sizeLoc = value;
+                return this;
+            }
+
+            private Builder nom(int value) {
+                this.nom = value;
+                return this;
+            }
+
+            private Builder publicMethods(int value) {
+                this.publicMethods = value;
+                return this;
+            }
+
+            private Builder avgMethodSize(double value) {
+                this.avgMethodSize = value;
+                return this;
+            }
+
+            private Builder cycloComplexity(int value) {
+                this.cycloComplexity = value;
+                return this;
+            }
+
+            private Builder fanOut(int value) {
+                this.fanOut = value;
+                return this;
+            }
+
+            private Builder isAbstract(boolean value) {
+                this.isAbstract = value;
+                return this;
+            }
+
+            private Builder isInterface(boolean value) {
+                this.isInterface = value;
+                return this;
+            }
+
+            private Builder isEnum(boolean value) {
+                this.isEnum = value;
+                return this;
+            }
+
+            private Builder isAnnotation(boolean value) {
+                this.isAnnotation = value;
+                return this;
+            }
+
+            private SourceStats build() {
+                return new SourceStats(this);
+            }
         }
     }
 
@@ -773,42 +908,49 @@ public class Milestone4ClassSelector {
             List<RankedClass> selected,
             Path outputDir
     ) {
-        System.out.println();
-        System.out.println("Ranking Milestone 4 completato.");
-        System.out.println("Release usata: "
-                + latestRelease.getVersionName()
-                + " | ID=" + latestRelease.getVersionId()
-                + " | Index=" + latestRelease.getIndex());
-        System.out.println("Classi accettate: " + accepted.size());
-        System.out.println("Classi scartate: " + discarded.size());
-        System.out.println("Output: " + outputDir);
+        LOGGER.info("");
+        LOGGER.info("Ranking Milestone 4 completato.");
+        LOGGER.log(Level.INFO,
+                "Release usata: {0} | ID={1} | Index={2}",
+                new Object[]{
+                        latestRelease.getVersionName(),
+                        latestRelease.getVersionId(),
+                        latestRelease.getIndex()
+                });
+        LOGGER.log(Level.INFO, "Classi accettate: {0}", accepted.size());
+        LOGGER.log(Level.INFO, "Classi scartate: {0}", discarded.size());
+        LOGGER.log(Level.INFO, "Output: {0}", outputDir);
 
-        System.out.println();
-        System.out.println("Top 10 classi accettate:");
+        LOGGER.info("");
+        LOGGER.info("Top 10 classi accettate:");
 
         accepted.stream()
                 .limit(10)
-                .forEach(c -> System.out.println(
-                        "- " + c.qualifiedName
-                                + " | NSmells=" + c.nSmells
-                                + " | LOC=" + c.sizeLoc
-                                + " | NOM=" + c.nom
-                                + " | PUBLIC=" + c.publicMethods
-                                + " | CYCLO=" + c.cycloComplexity
-                ));
+                .forEach(c -> LOGGER.log(Level.INFO,
+                        "- {0} | NSmells={1} | LOC={2} | NOM={3} | PUBLIC={4} | CYCLO={5}",
+                        new Object[]{
+                                c.qualifiedName,
+                                c.nSmells,
+                                c.sizeLoc,
+                                c.nom,
+                                c.publicMethods,
+                                c.cycloComplexity
+                        }));
 
-        System.out.println();
-        System.out.println("Classi selezionate:");
+        LOGGER.info("");
+        LOGGER.info("Classi selezionate:");
 
         for (RankedClass c : selected) {
-            System.out.println(
-                    "- originalRank=" + c.originalRank
-                            + " | " + c.qualifiedName
-                            + " | NSmells=" + c.nSmells
-                            + " | LOC=" + c.sizeLoc
-                            + " | NOM=" + c.nom
-                            + " | PUBLIC=" + c.publicMethods
-            );
+            LOGGER.log(Level.INFO,
+                    "- originalRank={0} | {1} | NSmells={2} | LOC={3} | NOM={4} | PUBLIC={5}",
+                    new Object[]{
+                            c.originalRank,
+                            c.qualifiedName,
+                            c.nSmells,
+                            c.sizeLoc,
+                            c.nom,
+                            c.publicMethods
+                    });
         }
     }
 
@@ -836,6 +978,8 @@ public class Milestone4ClassSelector {
         return CsvUtils.escapeCsv(String.valueOf(value));
     }
 
+
+
     private static final class RankedClass {
         private final String releaseId;
         private final String releaseName;
@@ -856,42 +1000,131 @@ public class Milestone4ClassSelector {
         private final boolean isAnnotation;
         private final int publicMethods;
 
-        private RankedClass(
-                String releaseId,
-                String releaseName,
-                String classPath,
-                String qualifiedName,
-                int nSmells,
-                int sizeLoc,
-                int nom,
-                int publicMethods,
-                double avgMethodSize,
-                int cycloComplexity,
-                int fanOut,
-                double smellDensity,
-                boolean isAbstract,
-                boolean isInterface,
-                boolean isEnum,
-                boolean isAnnotation
-        ) {
-            this.releaseId = releaseId;
-            this.releaseName = releaseName;
-            this.classPath = classPath;
-            this.qualifiedName = qualifiedName;
-            this.nSmells = nSmells;
-            this.sizeLoc = sizeLoc;
-            this.nom = nom;
-            this.publicMethods = publicMethods;
-            this.avgMethodSize = avgMethodSize;
-            this.cycloComplexity = cycloComplexity;
-            this.fanOut = fanOut;
-            this.smellDensity = smellDensity;
-            this.isAbstract = isAbstract;
-            this.isInterface = isInterface;
-            this.isEnum = isEnum;
-            this.isAnnotation = isAnnotation;
+        private RankedClass(Builder builder) {
+            this.releaseId = builder.releaseId;
+            this.releaseName = builder.releaseName;
+            this.classPath = builder.classPath;
+            this.qualifiedName = builder.qualifiedName;
+            this.nSmells = builder.nSmells;
+            this.sizeLoc = builder.sizeLoc;
+            this.nom = builder.nom;
+            this.publicMethods = builder.publicMethods;
+            this.avgMethodSize = builder.avgMethodSize;
+            this.cycloComplexity = builder.cycloComplexity;
+            this.fanOut = builder.fanOut;
+            this.smellDensity = builder.smellDensity;
+            this.isAbstract = builder.isAbstract;
+            this.isInterface = builder.isInterface;
+            this.isEnum = builder.isEnum;
+            this.isAnnotation = builder.isAnnotation;
         }
 
+        private static Builder builder() {
+            return new Builder();
+        }
+
+        private static final class Builder {
+            private String releaseId;
+            private String releaseName;
+            private String classPath;
+            private String qualifiedName;
+            private int nSmells;
+            private int sizeLoc;
+            private int nom;
+            private int publicMethods;
+            private double avgMethodSize;
+            private int cycloComplexity;
+            private int fanOut;
+            private double smellDensity;
+            private boolean isAbstract;
+            private boolean isInterface;
+            private boolean isEnum;
+            private boolean isAnnotation;
+
+            private Builder releaseId(String value) {
+                this.releaseId = value;
+                return this;
+            }
+
+            private Builder releaseName(String value) {
+                this.releaseName = value;
+                return this;
+            }
+
+            private Builder classPath(String value) {
+                this.classPath = value;
+                return this;
+            }
+
+            private Builder qualifiedName(String value) {
+                this.qualifiedName = value;
+                return this;
+            }
+
+            private Builder nSmells(int value) {
+                this.nSmells = value;
+                return this;
+            }
+
+            private Builder sizeLoc(int value) {
+                this.sizeLoc = value;
+                return this;
+            }
+
+            private Builder nom(int value) {
+                this.nom = value;
+                return this;
+            }
+
+            private Builder publicMethods(int value) {
+                this.publicMethods = value;
+                return this;
+            }
+
+            private Builder avgMethodSize(double value) {
+                this.avgMethodSize = value;
+                return this;
+            }
+
+            private Builder cycloComplexity(int value) {
+                this.cycloComplexity = value;
+                return this;
+            }
+
+            private Builder fanOut(int value) {
+                this.fanOut = value;
+                return this;
+            }
+
+            private Builder smellDensity(double value) {
+                this.smellDensity = value;
+                return this;
+            }
+
+            private Builder isAbstract(boolean value) {
+                this.isAbstract = value;
+                return this;
+            }
+
+            private Builder isInterface(boolean value) {
+                this.isInterface = value;
+                return this;
+            }
+
+            private Builder isEnum(boolean value) {
+                this.isEnum = value;
+                return this;
+            }
+
+            private Builder isAnnotation(boolean value) {
+                this.isAnnotation = value;
+                return this;
+            }
+
+            private RankedClass build() {
+                return new RankedClass(this);
+            }
+        }
 
         private int nSmells() {
             return nSmells;
