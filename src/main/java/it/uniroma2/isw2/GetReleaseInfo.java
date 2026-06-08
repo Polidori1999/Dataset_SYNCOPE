@@ -5,33 +5,36 @@ import org.json.JSONObject;
 
 import java.io.*;
 import java.net.URL;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 
 public class GetReleaseInfo {
 
-    public static HashMap<LocalDateTime, String> releaseNames;
-    public static HashMap<LocalDateTime, String> releaseID;
-    public static ArrayList<LocalDateTime> releases;
-    public static Integer numVersions;
+    private static HashMap<LocalDateTime, String> releaseNames;
+    private static HashMap<LocalDateTime, String> releaseID;
+    private static ArrayList<LocalDateTime> releases;
+    private static final Logger LOGGER = Logger.getLogger(GetReleaseInfo.class.getName());
+
 
     public static void main(String[] args) throws IOException, JSONException {
 
-        String projName ="SYNCOPE";
-        //Fills the arraylist with releases dates and orders them
-        //Ignores releases with missing dates
-        releases = new ArrayList<LocalDateTime>();
+        String projName = "SYNCOPE";
+// Fills the arraylist with releases dates and orders them
+// Ignores releases with missing dates
+        releases = new ArrayList<>();
         Integer i;
         String url = "https://issues.apache.org/jira/rest/api/2/project/" + projName;
         JSONObject json = readJsonFromUrl(url);
         JSONArray versions = json.getJSONArray("versions");
-        releaseNames = new HashMap<LocalDateTime, String>();
-        releaseID = new HashMap<LocalDateTime, String> ();
+        releaseNames = new HashMap<>();
+        releaseID = new HashMap<>();
         for (i = 0; i < versions.length(); i++ ) {
             String name = "";
             String id = "";
@@ -45,23 +48,20 @@ public class GetReleaseInfo {
             }
         }
         // order releases by date
-        Collections.sort(releases, new Comparator<LocalDateTime>(){
-            //@Override
-            public int compare(LocalDateTime o1, LocalDateTime o2) {
-                return o1.compareTo(o2);
-            }
-        });
+
+        Collections.sort(releases, LocalDateTime::compareTo);
         if (releases.size() < 6)
             return;
-        FileWriter fileWriter = null;
-        try {
-            fileWriter = null;
-            String outname = projName + "VersionInfo.csv";
-            //Name of CSV for output
-            fileWriter = new FileWriter(outname);
+
+        String outname = projName + "VersionInfo.csv";
+
+        // Utilizziamo il try-with-resources passandogli il FileWriter
+        try (FileWriter fileWriter = new FileWriter(outname)) {
+
             fileWriter.append("Index,Version ID,Version Name,Date");
             fileWriter.append("\n");
-            numVersions = releases.size();
+
+
             for ( i = 0; i < releases.size(); i++) {
                 Integer index = i + 1;
                 fileWriter.append(index.toString());
@@ -74,19 +74,11 @@ public class GetReleaseInfo {
                 fileWriter.append("\n");
             }
 
-        } catch (Exception e) {
-            System.out.println("Error in csv writer");
-            e.printStackTrace();
-        } finally {
-            try {
-                fileWriter.flush();
-                fileWriter.close();
-            } catch (IOException e) {
-                System.out.println("Error while flushing/closing fileWriter !!!");
-                e.printStackTrace();
-            }
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Error in csv writer", e);
         }
-        return;
+
+
     }
 
 
@@ -97,20 +89,18 @@ public class GetReleaseInfo {
             releases.add(dateTime);
         releaseNames.put(dateTime, name);
         releaseID.put(dateTime, id);
-        return;
+
     }
 
 
     public static JSONObject readJsonFromUrl(String url) throws IOException, JSONException {
-        InputStream is = new URL(url).openStream();
-        try {
-            BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
+        // Spostiamo la creazione dell'InputStream dentro le parentesi del try
+        try (InputStream is = new URL(url).openStream()) {
+            BufferedReader rd = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
             String jsonText = readAll(rd);
-            JSONObject json = new JSONObject(jsonText);
-            return json;
-        } finally {
-            is.close();
+            return new JSONObject(jsonText);
         }
+        // Il blocco finally non serve più: 'is' verrà chiuso in automatico
     }
 
     private static String readAll(Reader rd) throws IOException {
