@@ -24,21 +24,15 @@ public class ProportionService {
         int count = 0;
 
         for (EnhancedTicket ticket : tickets) {
-            if (!"AV".equals(ticket.getInjectedVersionSource())) {
-                continue;
+            if (isTicketUsableForProportion(ticket, releases)) {
+                int iv = findReleaseIndex(ticket.getInjectedVersion(), releases);
+                int ov = findReleaseIndex(ticket.getOpeningVersion(), releases);
+                int fv = findReleaseIndex(ticket.getFixedVersion(), releases);
+
+                double proportion = (double) (fv - iv) / (double) (fv - ov);
+                sum += proportion;
+                count++;
             }
-
-            int iv = findReleaseIndex(ticket.getInjectedVersion(), releases);
-            int ov = findReleaseIndex(ticket.getOpeningVersion(), releases);
-            int fv = findReleaseIndex(ticket.getFixedVersion(), releases);
-
-            if (!isValidLifecycle(iv, ov, fv)) {
-                continue;
-            }
-
-            double proportion = (double) (fv - iv) / (double) (fv - ov);
-            sum += proportion;
-            count++;
         }
 
         if (count == 0) {
@@ -46,6 +40,17 @@ public class ProportionService {
         }
 
         return sum / count;
+    }
+    private static boolean isTicketUsableForProportion(EnhancedTicket ticket, List<Release> releases) {
+        if (!"AV".equals(ticket.getInjectedVersionSource())) {
+            return false;
+        }
+
+        int iv = findReleaseIndex(ticket.getInjectedVersion(), releases);
+        int ov = findReleaseIndex(ticket.getOpeningVersion(), releases);
+        int fv = findReleaseIndex(ticket.getFixedVersion(), releases);
+
+        return isValidLifecycle(iv, ov, fv);
     }
 
     public static List<EnhancedTicket> estimateMissingInjectedVersions(List<EnhancedTicket> tickets,
@@ -62,16 +67,16 @@ public class ProportionService {
             String estimatedIv = estimateInjectedVersion(ticket, releases, proportion);
             String source = estimatedIv.isBlank() ? "NONE" : "P";
 
-            EnhancedTicket updatedTicket = new EnhancedTicket(
-                    ticket.getTicketId(),
-                    ticket.getCreationDate(),
-                    ticket.getResolutionDate(),
-                    ticket.getAffectedVersions(),
-                    ticket.getOpeningVersion(),
-                    ticket.getFixedVersion(),
-                    estimatedIv,
-                    source
-            );
+            EnhancedTicket updatedTicket = EnhancedTicket.builder()
+                    .ticketId(ticket.getTicketId())
+                    .creationDate(ticket.getCreationDate())
+                    .resolutionDate(ticket.getResolutionDate())
+                    .affectedVersions(ticket.getAffectedVersions())
+                    .openingVersion(ticket.getOpeningVersion())
+                    .fixedVersion(ticket.getFixedVersion())
+                    .injectedVersion(estimatedIv)
+                    .injectedVersionSource(source)
+                    .build();
 
             result.add(updatedTicket);
         }

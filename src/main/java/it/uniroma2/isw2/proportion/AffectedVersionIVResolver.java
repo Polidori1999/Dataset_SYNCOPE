@@ -42,16 +42,16 @@ public class AffectedVersionIVResolver {
                 source = "NONE";
             }
 
-            EnhancedTicket updatedTicket = new EnhancedTicket(
-                    ticket.getTicketId(),
-                    ticket.getCreationDate(),
-                    ticket.getResolutionDate(),
-                    ticket.getAffectedVersions(),
-                    ticket.getOpeningVersion(),
-                    ticket.getFixedVersion(),
-                    initialIV,
-                    source
-            );
+            EnhancedTicket updatedTicket = EnhancedTicket.builder()
+                    .ticketId(ticket.getTicketId())
+                    .creationDate(ticket.getCreationDate())
+                    .resolutionDate(ticket.getResolutionDate())
+                    .affectedVersions(ticket.getAffectedVersions())
+                    .openingVersion(ticket.getOpeningVersion())
+                    .fixedVersion(ticket.getFixedVersion())
+                    .injectedVersion(initialIV)
+                    .injectedVersionSource(source)
+                    .build();
 
             updatedTickets.add(updatedTicket);
         }
