@@ -1,6 +1,7 @@
 package it.uniroma2.isw2.metric;
 
 import it.uniroma2.isw2.labeling.GitCommandRunner;
+import it.uniroma2.isw2.labeling.GitReleaseSnapshotService;
 import it.uniroma2.isw2.model.Release;
 import it.uniroma2.isw2.model.ReleaseJavaClass;
 import it.uniroma2.isw2.utils.DateUtils;
@@ -62,22 +63,20 @@ public class MetricService {
 
     private final String projectName;
     private final Path repositoryPath;
+    private final GitReleaseSnapshotService snapshotService;
 
     private final Set<String> fixCommitHashes;
     private final Map<String, List<String>> changedFilesByCommit = new HashMap<>();
 
-    public MetricService(String projectName, Path repositoryPath) {
-        this(projectName, repositoryPath, Collections.emptySet());
-    }
 
     public MetricService(String projectName,
                          Path repositoryPath,
                          Set<String> fixCommitHashes) {
         this.projectName = projectName;
         this.repositoryPath = repositoryPath;
+        this.snapshotService = new GitReleaseSnapshotService(repositoryPath);
         this.fixCommitHashes = normalizeCommitHashes(fixCommitHashes);
     }
-
     public List<ClassReleaseMetric> computeMetrics(List<Release> selectedReleases,
                                                    List<ReleaseJavaClass> releaseJavaClasses)
             throws IOException {
@@ -103,13 +102,13 @@ public class MetricService {
             throws IOException {
         List<ClassReleaseMetric> result = new ArrayList<>();
 
-        String originalCommitHash = getCurrentCommitHash();
+        String originalCommitHash = snapshotService.getCurrentCommitHash();
 
         try {
             for (Release release : selectedReleases) {
                 String releaseId = release.getVersionId();
 
-                String snapshotCommitHash = findLastCommitOfReleaseDay(
+                String snapshotCommitHash = snapshotService.findLastCommitOfReleaseDay(
                         release.getDate(),
                         originalCommitHash
                 );
@@ -118,7 +117,7 @@ public class MetricService {
                     continue;
                 }
 
-                checkout(snapshotCommitHash);
+                snapshotService.checkout(snapshotCommitHash);
 
                 List<ReleaseJavaClass> classesOfRelease =
                         filterClassesByRelease(releaseJavaClasses, releaseId);
@@ -155,29 +154,34 @@ public class MetricService {
                     );
 
                     result.add(ClassReleaseMetric.builder()
-                            .project(projectName)
-                            .releaseId(releaseId)
-                            .classPath(normalizedClassPath)
-                            .sizeLoc(sourceMetrics.sizeLoc)
-                            .nom(sourceMetrics.nom)
-                            .avgMethodSize(sourceMetrics.avgMethodSize)
-                            .cycloComplexity(sourceMetrics.cycloComplexity)
-                            .fanOut(sourceMetrics.fanOut)
-                            .nr(historicalMetrics.nr)
-                            .nFix(historicalMetrics.nFix)
-                            .nAuth(historicalMetrics.nAuth)
-                            .locAdded(historicalMetrics.locAdded)
-                            .maxLocAdded(historicalMetrics.maxLocAdded)
-                            .churn(historicalMetrics.churn)
-                            .maxChurn(historicalMetrics.maxChurn)
-                            .maxChangeSetSize(historicalMetrics.maxChangeSetSize)
-                            .avgModifiedDirs(historicalMetrics.avgModifiedDirs)
-                            .ageSinceLastChange(historicalMetrics.ageSinceLastChange)
-                            .ownershipRatio(historicalMetrics.ownershipRatio)
-                            .nSmells(nSmells)
-                            .smellDensity(smellDensity)
-                            .sameDirectoryChangeRatio(historicalMetrics.sameDirectoryChangeRatio)
-                            .age(historicalMetrics.age)
+                            .identity(projectName, releaseId, normalizedClassPath)
+                            .sourceMetrics(
+                                    sourceMetrics.sizeLoc,
+                                    sourceMetrics.nom,
+                                    sourceMetrics.avgMethodSize,
+                                    sourceMetrics.cycloComplexity,
+                                    sourceMetrics.fanOut
+                            )
+                            .historicalCounts(
+                                    historicalMetrics.nr,
+                                    historicalMetrics.nFix,
+                                    historicalMetrics.nAuth
+                            )
+                            .historicalChanges(
+                                    historicalMetrics.locAdded,
+                                    historicalMetrics.maxLocAdded,
+                                    historicalMetrics.churn,
+                                    historicalMetrics.maxChurn,
+                                    historicalMetrics.maxChangeSetSize,
+                                    historicalMetrics.avgModifiedDirs
+                            )
+                            .historicalRatios(
+                                    historicalMetrics.ageSinceLastChange,
+                                    historicalMetrics.ownershipRatio,
+                                    historicalMetrics.sameDirectoryChangeRatio,
+                                    historicalMetrics.age
+                            )
+                            .smellMetrics(nSmells, smellDensity)
                             .build());
                 }
 
