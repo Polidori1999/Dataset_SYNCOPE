@@ -41,52 +41,192 @@ public class ClassReleaseMetric {
 
     private final long age;
 
-    public ClassReleaseMetric(String project,
-                              String releaseId,
-                              String classPath,
-                              int sizeLoc,
-                              int nom,
-                              double avgMethodSize,
-                              int cycloComplexity,
-                              int fanOut,
-                              int nr,
-                              int nFix,
-                              int nAuth,
-                              int locAdded,
-                              int maxLocAdded,
-                              int churn,
-                              int maxChurn,
-                              int maxChangeSetSize,
-                              double avgModifiedDirs,
-                              long ageSinceLastChange,
-                              double ownershipRatio,
-                              int nSmells,
-                              double smellDensity,
-                              double sameDirectoryChangeRatio,
-                              long age) {
-        this.project = project;
-        this.releaseId = releaseId;
-        this.classPath = classPath;
-        this.sizeLoc = sizeLoc;
-        this.nom = nom;
-        this.avgMethodSize = avgMethodSize;
-        this.cycloComplexity = cycloComplexity;
-        this.fanOut = fanOut;
-        this.nr = nr;
-        this.nFix = nFix;
-        this.nAuth = nAuth;
-        this.locAdded = locAdded;
-        this.maxLocAdded = maxLocAdded;
-        this.churn = churn;
-        this.maxChurn = maxChurn;
-        this.maxChangeSetSize = maxChangeSetSize;
-        this.avgModifiedDirs = avgModifiedDirs;
-        this.ageSinceLastChange = ageSinceLastChange;
-        this.ownershipRatio = ownershipRatio;
-        this.nSmells = nSmells;
-        this.smellDensity = smellDensity;
-        this.sameDirectoryChangeRatio = sameDirectoryChangeRatio;
-        this.age = age;
+    private ClassReleaseMetric(Builder builder) {
+        this.project = builder.project;
+        this.releaseId = builder.releaseId;
+        this.classPath = builder.classPath;
+        this.sizeLoc = builder.sizeLoc;
+        this.nom = builder.nom;
+        this.avgMethodSize = builder.avgMethodSize;
+        this.cycloComplexity = builder.cycloComplexity;
+        this.fanOut = builder.fanOut;
+        this.nr = builder.nr;
+        this.nFix = builder.nFix;
+        this.nAuth = builder.nAuth;
+        this.locAdded = builder.locAdded;
+        this.maxLocAdded = builder.maxLocAdded;
+        this.churn = builder.churn;
+        this.maxChurn = builder.maxChurn;
+        this.maxChangeSetSize = builder.maxChangeSetSize;
+        this.avgModifiedDirs = builder.avgModifiedDirs;
+        this.ageSinceLastChange = builder.ageSinceLastChange;
+        this.ownershipRatio = builder.ownershipRatio;
+        this.nSmells = builder.nSmells;
+        this.smellDensity = builder.smellDensity;
+        this.sameDirectoryChangeRatio = builder.sameDirectoryChangeRatio;
+        this.age = builder.age;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+
+        private String project;
+        private String releaseId;
+        private String classPath;
+
+        private int sizeLoc;
+        private int nom;
+        private double avgMethodSize;
+        private int cycloComplexity;
+        private int fanOut;
+
+        private int nr;
+        private int nFix;
+        private int nAuth;
+
+        private int locAdded;
+        private int maxLocAdded;
+
+        private int churn;
+        private int maxChurn;
+
+        private int maxChangeSetSize;
+        private double avgModifiedDirs;
+
+        private long ageSinceLastChange;
+        private double ownershipRatio;
+
+        private int nSmells;
+        private double smellDensity;
+
+        private double sameDirectoryChangeRatio;
+
+        private long age;
+
+        private Builder() {
+        }
+
+        public Builder project(String value) {
+            this.project = value;
+            return this;
+        }
+
+        public Builder releaseId(String value) {
+            this.releaseId = value;
+            return this;
+        }
+
+        public Builder classPath(String value) {
+            this.classPath = value;
+            return this;
+        }
+
+        public Builder sizeLoc(int value) {
+            this.sizeLoc = value;
+            return this;
+        }
+
+        public Builder nom(int value) {
+            this.nom = value;
+            return this;
+        }
+
+        public Builder avgMethodSize(double value) {
+            this.avgMethodSize = value;
+            return this;
+        }
+
+        public Builder cycloComplexity(int value) {
+            this.cycloComplexity = value;
+            return this;
+        }
+
+        public Builder fanOut(int value) {
+            this.fanOut = value;
+            return this;
+        }
+
+        public Builder nr(int value) {
+            this.nr = value;
+            return this;
+        }
+
+        public Builder nFix(int value) {
+            this.nFix = value;
+            return this;
+        }
+
+        public Builder nAuth(int value) {
+            this.nAuth = value;
+            return this;
+        }
+
+        public Builder locAdded(int value) {
+            this.locAdded = value;
+            return this;
+        }
+
+        public Builder maxLocAdded(int value) {
+            this.maxLocAdded = value;
+            return this;
+        }
+
+        public Builder churn(int value) {
+            this.churn = value;
+            return this;
+        }
+
+        public Builder maxChurn(int value) {
+            this.maxChurn = value;
+            return this;
+        }
+
+        public Builder maxChangeSetSize(int value) {
+            this.maxChangeSetSize = value;
+            return this;
+        }
+
+        public Builder avgModifiedDirs(double value) {
+            this.avgModifiedDirs = value;
+            return this;
+        }
+
+        public Builder ageSinceLastChange(long value) {
+            this.ageSinceLastChange = value;
+            return this;
+        }
+
+        public Builder ownershipRatio(double value) {
+            this.ownershipRatio = value;
+            return this;
+        }
+
+        public Builder nSmells(int value) {
+            this.nSmells = value;
+            return this;
+        }
+
+        public Builder smellDensity(double value) {
+            this.smellDensity = value;
+            return this;
+        }
+
+        public Builder sameDirectoryChangeRatio(double value) {
+            this.sameDirectoryChangeRatio = value;
+            return this;
+        }
+
+        public Builder age(long value) {
+            this.age = value;
+            return this;
+        }
+
+        public ClassReleaseMetric build() {
+            return new ClassReleaseMetric(this);
+        }
     }
 
     public String getProject() {
@@ -179,21 +319,5 @@ public class ClassReleaseMetric {
 
     public long getAge() {
         return age;
-    }
-
-    /*
-     * Getter di compatibilità, utili se qualche writer vecchio usa ancora
-     * nomi precedenti.
-     */
-    public int getLoc() {
-        return sizeLoc;
-    }
-
-    public int getDependencies() {
-        return fanOut;
-    }
-
-    public double getOwnership() {
-        return ownershipRatio;
     }
 }

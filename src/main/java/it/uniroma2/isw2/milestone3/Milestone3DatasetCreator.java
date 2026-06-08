@@ -8,8 +8,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Milestone3DatasetCreator {
+    private static final Logger LOGGER =
+            Logger.getLogger(Milestone3DatasetCreator.class.getName());
 
     private static final Path INPUT_CSV = Path.of(
             "/home/leonardo/uni/isw2/Dataset_SYNCOPE/dataset_SYNCOPE.csv"
@@ -68,15 +72,14 @@ public class Milestone3DatasetCreator {
                 buggyIndex
         );
 
-        System.out.println("Dataset Milestone 3 creati correttamente.");
-        System.out.println("Input: " + inputCsv.toAbsolutePath());
-        System.out.println("Cartella output: " + outputDir.toAbsolutePath());
-        System.out.println();
+        LOGGER.info("Dataset Milestone 3 creati correttamente.");
+        LOGGER.log(Level.INFO, "Input: {0}", inputCsv.toAbsolutePath());
+        LOGGER.log(Level.INFO, "Cartella output: {0}", outputDir.toAbsolutePath());
 
-        System.out.println("A_original.csv: " + datasetA.size() + " righe");
-        System.out.println("B_plus_smelly.csv: " + datasetBPlus.size() + " righe");
-        System.out.println("B_synthetic_zero_smells.csv: " + datasetB.size() + " righe");
-        System.out.println("C_no_smells.csv: " + datasetC.size() + " righe");
+        LOGGER.log(Level.INFO, "A_original.csv: {0} righe", datasetA.size());
+        LOGGER.log(Level.INFO, "B_plus_smelly.csv: {0} righe", datasetBPlus.size());
+        LOGGER.log(Level.INFO, "B_synthetic_zero_smells.csv: {0} righe", datasetB.size());
+        LOGGER.log(Level.INFO, "C_no_smells.csv: {0} righe", datasetC.size());
     }
 
     private static CsvTable readCsv(Path inputCsv) throws IOException {
@@ -143,18 +146,23 @@ public class Milestone3DatasetCreator {
     private static int countCharOutsideQuotes(String line, char target) {
         boolean inQuotes = false;
         int count = 0;
+        int i = 0;
 
-        for (int i = 0; i < line.length(); i++) {
+        while (i < line.length()) {
             char current = line.charAt(i);
 
             if (current == '"') {
                 if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                    i++;
+                    i += 2;
                 } else {
                     inQuotes = !inQuotes;
+                    i++;
                 }
-            } else if (current == target && !inQuotes) {
-                count++;
+            } else {
+                if (current == target && !inQuotes) {
+                    count++;
+                }
+                i++;
             }
         }
 
@@ -165,22 +173,26 @@ public class Milestone3DatasetCreator {
         List<String> values = new ArrayList<>();
         StringBuilder currentValue = new StringBuilder();
         boolean inQuotes = false;
+        int i = 0;
 
-        for (int i = 0; i < line.length(); i++) {
+        while (i < line.length()) {
             char current = line.charAt(i);
 
             if (current == '"') {
                 if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
                     currentValue.append('"');
-                    i++;
+                    i += 2;
                 } else {
                     inQuotes = !inQuotes;
+                    i++;
                 }
             } else if (current == delimiter && !inQuotes) {
                 values.add(currentValue.toString());
                 currentValue.setLength(0);
+                i++;
             } else {
                 currentValue.append(current);
+                i++;
             }
         }
 

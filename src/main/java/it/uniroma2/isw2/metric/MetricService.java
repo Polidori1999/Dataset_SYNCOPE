@@ -21,6 +21,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Calcola le metriche classe-release del dataset di defect prediction.
@@ -52,6 +54,8 @@ import java.util.Set;
  * - SMELL_DENSITY
  */
 public class MetricService {
+    private static final Logger LOGGER =
+            Logger.getLogger(MetricService.class.getName());
 
     private static final DateTimeFormatter GIT_BEFORE_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -150,45 +154,36 @@ public class MetricService {
                             Math.max(1, sourceMetrics.sizeLoc)
                     );
 
-                    result.add(new ClassReleaseMetric(
-                            projectName,
-                            releaseId,
-                            normalizedClassPath,
-
-                            sourceMetrics.sizeLoc,
-                            sourceMetrics.nom,
-                            sourceMetrics.avgMethodSize,
-                            sourceMetrics.cycloComplexity,
-                            sourceMetrics.fanOut,
-
-                            historicalMetrics.nr,
-                            historicalMetrics.nFix,
-                            historicalMetrics.nAuth,
-
-                            historicalMetrics.locAdded,
-                            historicalMetrics.maxLocAdded,
-
-                            historicalMetrics.churn,
-                            historicalMetrics.maxChurn,
-
-                            historicalMetrics.maxChangeSetSize,
-                            historicalMetrics.avgModifiedDirs,
-
-                            historicalMetrics.ageSinceLastChange,
-                            historicalMetrics.ownershipRatio,
-
-                            nSmells,
-                            smellDensity,
-
-                            historicalMetrics.sameDirectoryChangeRatio,
-
-                            historicalMetrics.age
-                    ));
+                    result.add(ClassReleaseMetric.builder()
+                            .project(projectName)
+                            .releaseId(releaseId)
+                            .classPath(normalizedClassPath)
+                            .sizeLoc(sourceMetrics.sizeLoc)
+                            .nom(sourceMetrics.nom)
+                            .avgMethodSize(sourceMetrics.avgMethodSize)
+                            .cycloComplexity(sourceMetrics.cycloComplexity)
+                            .fanOut(sourceMetrics.fanOut)
+                            .nr(historicalMetrics.nr)
+                            .nFix(historicalMetrics.nFix)
+                            .nAuth(historicalMetrics.nAuth)
+                            .locAdded(historicalMetrics.locAdded)
+                            .maxLocAdded(historicalMetrics.maxLocAdded)
+                            .churn(historicalMetrics.churn)
+                            .maxChurn(historicalMetrics.maxChurn)
+                            .maxChangeSetSize(historicalMetrics.maxChangeSetSize)
+                            .avgModifiedDirs(historicalMetrics.avgModifiedDirs)
+                            .ageSinceLastChange(historicalMetrics.ageSinceLastChange)
+                            .ownershipRatio(historicalMetrics.ownershipRatio)
+                            .nSmells(nSmells)
+                            .smellDensity(smellDensity)
+                            .sameDirectoryChangeRatio(historicalMetrics.sameDirectoryChangeRatio)
+                            .age(historicalMetrics.age)
+                            .build());
                 }
 
-                System.out.println("Metriche calcolate per release "
-                        + release.getVersionName()
-                        + " (" + releaseId + ").");
+                LOGGER.log(Level.INFO,
+                        "Metriche calcolate per release {0} ({1}).",
+                        new Object[]{release.getVersionName(), releaseId});
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -196,9 +191,15 @@ public class MetricService {
         } finally {
             try {
                 checkout(originalCommitHash);
-            } catch (Exception e) {
-                System.out.println("Attenzione: impossibile ripristinare il commit originale della repository.");
-                e.printStackTrace();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOGGER.log(Level.SEVERE,
+                        "Attenzione: impossibile ripristinare il commit originale della repository.",
+                        e);
+            } catch (IOException e) {
+                LOGGER.log(Level.SEVERE,
+                        "Attenzione: impossibile ripristinare il commit originale della repository.",
+                        e);
             }
         }
 
@@ -283,28 +284,27 @@ public class MetricService {
         for (String line : lines) {
             String normalizedLine = removeInlineComment(line).trim();
 
-            if (normalizedLine.isBlank()) {
-                continue;
+            if (!normalizedLine.isBlank()) {
+                signatureBuilder.append(' ').append(normalizedLine);
+
+                if (isSignatureComplete(normalizedLine)) {
+                    String candidate = signatureBuilder.toString().trim();
+
+                    if (looksLikeMethodDeclaration(candidate)) {
+                        count++;
+                    }
+
+                    signatureBuilder.setLength(0);
+                }
             }
-
-            signatureBuilder.append(' ').append(normalizedLine);
-
-            if (!normalizedLine.contains("{")
-                    && !normalizedLine.endsWith(";")
-                    && !normalizedLine.endsWith("}")) {
-                continue;
-            }
-
-            String candidate = signatureBuilder.toString().trim();
-
-            if (looksLikeMethodDeclaration(candidate)) {
-                count++;
-            }
-
-            signatureBuilder.setLength(0);
         }
 
         return count;
+    }
+    private boolean isSignatureComplete(String normalizedLine) {
+        return normalizedLine.contains("{")
+                || normalizedLine.endsWith(";")
+                || normalizedLine.endsWith("}");
     }
 
     private boolean looksLikeMethodDeclaration(String candidate) {
@@ -379,7 +379,7 @@ public class MetricService {
     }
 
     private int countKeyword(String line, String keyword) {
-        String[] tokens = line.split("[^A-Za-z0-9_]+");
+        String[] tokens = line.split("\\W+");
 
         int count = 0;
 
@@ -514,59 +514,53 @@ public class MetricService {
         for (String line : lines) {
             if (line.startsWith("__COMMIT__")) {
                 if (currentCommit != null) {
-                    CommitContext context = buildCommitContext(
-                            currentCommit.commitHash,
-                            classPath
-                    );
-
-                    accumulator.accept(
-                            currentCommit,
-                            context,
-                            fixCommitHashes.contains(currentCommit.commitHash)
-                    );
+                    acceptCurrentCommit(accumulator, currentCommit, classPath);
                 }
 
                 currentCommit = parseCommitHeader(line);
-                continue;
+            } else if (currentCommit != null) {
+                updateCurrentCommitStats(currentCommit, line);
             }
-
-            if (currentCommit == null) {
-                continue;
-            }
-
-            String trimmed = line.trim();
-
-            if (trimmed.isBlank()) {
-                continue;
-            }
-
-            String[] parts = trimmed.split("\\t");
-
-            if (parts.length < 2) {
-                continue;
-            }
-
-            int added = parseNumstatValue(parts[0]);
-            int deleted = parseNumstatValue(parts[1]);
-
-            currentCommit.added += added;
-            currentCommit.deleted += deleted;
         }
 
         if (currentCommit != null) {
-            CommitContext context = buildCommitContext(
-                    currentCommit.commitHash,
-                    classPath
-            );
-
-            accumulator.accept(
-                    currentCommit,
-                    context,
-                    fixCommitHashes.contains(currentCommit.commitHash)
-            );
+            acceptCurrentCommit(accumulator, currentCommit, classPath);
         }
 
         return accumulator.toHistoricalMetrics(currentReleaseEndExclusive);
+    }
+
+    private void acceptCurrentCommit(
+            HistoricalAccumulator accumulator,
+            CurrentCommit currentCommit,
+            String classPath
+    ) throws IOException, InterruptedException {
+        CommitContext context = buildCommitContext(
+                currentCommit.commitHash,
+                classPath
+        );
+
+        accumulator.accept(
+                currentCommit,
+                context,
+                fixCommitHashes.contains(currentCommit.commitHash)
+        );
+    }
+
+    private void updateCurrentCommitStats(CurrentCommit currentCommit, String line) {
+        String trimmed = line.trim();
+
+        if (!trimmed.isBlank()) {
+            String[] parts = trimmed.split("\\t");
+
+            if (parts.length >= 2) {
+                int added = parseNumstatValue(parts[0]);
+                int deleted = parseNumstatValue(parts[1]);
+
+                currentCommit.added += added;
+                currentCommit.deleted += deleted;
+            }
+        }
     }
 
     private CurrentCommit parseCommitHeader(String line) {
@@ -775,25 +769,9 @@ public class MetricService {
         return numerator / denominator;
     }
 
-    private static LocalDateTime epochToUtcDateTime(long epochSeconds) {
-        return LocalDateTime.ofInstant(
-                Instant.ofEpochSecond(epochSeconds),
-                ZoneOffset.UTC
-        );
-    }
 
-    private static long daysBetween(long commitEpochSeconds,
-                                    LocalDateTime releaseEndExclusive) {
-        if (commitEpochSeconds <= 0) {
-            return 0;
-        }
 
-        LocalDateTime commitDate = epochToUtcDateTime(commitEpochSeconds);
 
-        long days = ChronoUnit.DAYS.between(commitDate, releaseEndExclusive);
-
-        return Math.max(days, 0);
-    }
 
     private static class SourceMetrics {
 
@@ -923,6 +901,21 @@ public class MetricService {
             if (context.sameDirectoryOnly) {
                 sameDirectoryCommits++;
             }
+        }
+
+
+        private long daysBetween(long commitEpochSeconds,
+                                 LocalDateTime releaseEndExclusive) {
+            if (commitEpochSeconds <= 0) {
+                return 0;
+            }
+
+            Instant commitInstant = Instant.ofEpochSecond(commitEpochSeconds);
+            Instant releaseInstant = releaseEndExclusive.toInstant(ZoneOffset.UTC);
+
+            long days = ChronoUnit.DAYS.between(commitInstant, releaseInstant);
+
+            return Math.max(days, 0);
         }
 
         private HistoricalMetrics toHistoricalMetrics(LocalDateTime releaseEndExclusive) {
