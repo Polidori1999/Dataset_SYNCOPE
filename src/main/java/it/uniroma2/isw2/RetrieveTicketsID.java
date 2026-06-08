@@ -6,9 +6,18 @@ import org.json.JSONObject;
 
 import java.io.*;
 import java.net.URL;
-import java.nio.charset.Charset;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.nio.charset.StandardCharsets;
 
 class RetrieveTicketsID {
+    private static final Logger LOGGER =
+            Logger.getLogger(RetrieveTicketsID.class.getName());
+    private static final String FIELD_CREATED = "created";
+    private static final String FIELD_VERSIONS = "versions";
+    private static final String FIELD_RESOLUTIONDATE = "resolutiondate";
+    private static final String FIELD_NAME = "name";
+
 
     private static String readAll(Reader rd) throws IOException {
         StringBuilder sb = new StringBuilder();
@@ -20,105 +29,115 @@ class RetrieveTicketsID {
     }
 
     public static JSONArray readJsonArrayFromUrl(String url) throws IOException, JSONException {
-        InputStream is = new URL(url).openStream();
-        try {
-            BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
+        try (InputStream is = new URL(url).openStream()) {
+            BufferedReader rd = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
             String jsonText = readAll(rd);
             return new JSONArray(jsonText);
-        } finally {
-            is.close();
         }
     }
 
     public static JSONObject readJsonFromUrl(String url) throws IOException, JSONException {
-        InputStream is = new URL(url).openStream();
-        try {
-            BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
+        try (InputStream is = new URL(url).openStream()) {
+            BufferedReader rd = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
             String jsonText = readAll(rd);
             return new JSONObject(jsonText);
-        } finally {
-            is.close();
         }
     }
 
     public static void main(String[] args) throws IOException, JSONException {
         String projName = "SYNCOPE";
-        int i = 0;
+        String outName = projName + "Tickets.csv";
+
+        try (FileWriter fileWriter = new FileWriter(outName)) {
+            writeTicketsCsv(fileWriter, projName);
+            LOGGER.info("CSV creato con successo.");
+        } catch (IOException | JSONException e) {
+            LOGGER.log(Level.SEVERE, "Errore nella scrittura del CSV.", e);
+        }
+    }
+    private static void writeTicketsCsv(FileWriter fileWriter, String projName)
+            throws IOException, JSONException {
+        int startAt = 0;
         int total;
         int pageSize = 1000;
 
-        FileWriter fileWriter = null;
+        fileWriter.append("TicketID,CreationDate,ResolutionDate,AffectedVersions\n");
 
-        try {
-            String outName = projName + "Tickets.csv";
-            fileWriter = new FileWriter(outName);
+        do {
+            JSONObject json = readJsonFromUrl(buildSearchUrl(projName, startAt, pageSize));
+            JSONArray issues = json.getJSONArray("issues");
+            total = json.getInt("total");
 
-            fileWriter.append("TicketID,CreationDate,ResolutionDate,AffectedVersions\n");
+            writeIssues(fileWriter, issues);
 
-            do {
-                String url = "https://issues.apache.org/jira/rest/api/2/search?jql=project=%22"
-                        + projName
-                        + "%22AND%22issueType%22=%22Bug%22AND(%22status%22=%22closed%22OR%22status%22=%22resolved%22)"
-                        + "AND%22resolution%22=%22fixed%22&fields=key,resolutiondate,versions,created&startAt="
-                        + i
-                        + "&maxResults="
-                        + pageSize;
+            startAt += issues.length();
 
-                JSONObject json = readJsonFromUrl(url);
-                JSONArray issues = json.getJSONArray("issues");
-                total = json.getInt("total");
+        } while (startAt < total);
+    }
 
-                for (int k = 0; k < issues.length(); k++) {
-                    JSONObject issue = issues.getJSONObject(k);
-                    JSONObject fields = issue.getJSONObject("fields");
+    private static String buildSearchUrl(String projName, int startAt, int pageSize) {
+        return "https://issues.apache.org/jira/rest/api/2/search?jql=project=%22"
+                + projName
+                + "%22AND%22issueType%22=%22Bug%22AND(%22status%22=%22closed%22OR%22status%22=%22resolved%22)"
+                + "AND%22resolution%22=%22fixed%22&fields=key,resolutiondate,versions,created&startAt="
+                + startAt
+                + "&maxResults="
+                + pageSize;
+    }
 
-                    String key = issue.getString("key");
-                    String created = fields.has("created") && !fields.isNull("created")
-                            ? fields.getString("created")
-                            : "";
-                    String resolutionDate = fields.has("resolutiondate") && !fields.isNull("resolutiondate")
-                            ? fields.getString("resolutiondate")
-                            : "";
+    private static void writeIssues(FileWriter fileWriter, JSONArray issues)
+            throws IOException, JSONException {
+        for (int k = 0; k < issues.length(); k++) {
+            writeIssue(fileWriter, issues.getJSONObject(k));
+        }
+    }
 
-                    StringBuilder affectedVersions = new StringBuilder();
-                    if (fields.has("versions") && !fields.isNull("versions")) {
-                        JSONArray versions = fields.getJSONArray("versions");
-                        for (int v = 0; v < versions.length(); v++) {
-                            JSONObject versionObj = versions.getJSONObject(v);
-                            if (versionObj.has("name")) {
-                                if (affectedVersions.length() > 0) {
-                                    affectedVersions.append(";");
-                                }
-                                affectedVersions.append(versionObj.getString("name"));
-                            }
-                        }
-                    }
+    private static void writeIssue(FileWriter fileWriter, JSONObject issue)
+            throws IOException, JSONException {
+        JSONObject fields = issue.getJSONObject("fields");
 
-                    fileWriter.append(escapeCsv(key)).append(",");
-                    fileWriter.append(escapeCsv(created)).append(",");
-                    fileWriter.append(escapeCsv(resolutionDate)).append(",");
-                    fileWriter.append(escapeCsv(affectedVersions.toString())).append("\n");
-                }
+        String key = issue.getString("key");
+        String created = getOptionalString(fields, FIELD_CREATED);
+        String resolutionDate = getOptionalString(fields, FIELD_RESOLUTIONDATE);
+        String affectedVersions = buildAffectedVersions(fields);
 
-                i += issues.length();
+        fileWriter.append(escapeCsv(key)).append(",");
+        fileWriter.append(escapeCsv(created)).append(",");
+        fileWriter.append(escapeCsv(resolutionDate)).append(",");
+        fileWriter.append(escapeCsv(affectedVersions)).append("\n");
+    }
 
-            } while (i < total);
+    private static String getOptionalString(JSONObject object, String fieldName)
+            throws JSONException {
+        return object.has(fieldName) && !object.isNull(fieldName)
+                ? object.getString(fieldName)
+                : "";
+    }
 
-            System.out.println("CSV creato con successo.");
+    private static String buildAffectedVersions(JSONObject fields) throws JSONException {
+        StringBuilder affectedVersions = new StringBuilder();
 
-        } catch (Exception e) {
-            System.out.println("Errore nella scrittura del CSV.");
-            e.printStackTrace();
-        } finally {
-            if (fileWriter != null) {
-                try {
-                    fileWriter.flush();
-                    fileWriter.close();
-                } catch (IOException e) {
-                    System.out.println("Errore nella chiusura del file.");
-                    e.printStackTrace();
-                }
+        if (fields.has(FIELD_VERSIONS) && !fields.isNull(FIELD_VERSIONS)) {
+            appendAffectedVersions(affectedVersions, fields.getJSONArray(FIELD_VERSIONS));
+        }
+
+        return affectedVersions.toString();
+    }
+
+    private static void appendAffectedVersions(StringBuilder affectedVersions, JSONArray versions)
+            throws JSONException {
+        for (int v = 0; v < versions.length(); v++) {
+            appendAffectedVersion(affectedVersions, versions.getJSONObject(v));
+        }
+    }
+
+    private static void appendAffectedVersion(StringBuilder affectedVersions, JSONObject versionObj)
+            throws JSONException {
+        if (versionObj.has(FIELD_NAME)) {
+            if (!affectedVersions.isEmpty()) {
+                affectedVersions.append(";");
             }
+            affectedVersions.append(versionObj.getString(FIELD_NAME));
         }
     }
 
