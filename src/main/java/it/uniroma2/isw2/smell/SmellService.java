@@ -12,6 +12,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Calcola NSmells per ogni coppia classe-release usando PMD.
@@ -19,6 +21,8 @@ import java.util.Map;
  * esegue PMD e associa le violation alle classi presenti nell'inventory.
  */
 public class SmellService {
+    private static final Logger LOGGER =
+            Logger.getLogger(SmellService.class.getName());
 
     private static final DateTimeFormatter GIT_BEFORE_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -98,9 +102,9 @@ public class SmellService {
                     ));
                 }
 
-                System.out.println("Smell calcolati per release "
-                        + release.getVersionName()
-                        + " (" + releaseId + ").");
+                LOGGER.log(Level.INFO,
+                        "Smell calcolati per release {0} ({1}).",
+                        new Object[]{release.getVersionName(), releaseId});
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -108,9 +112,15 @@ public class SmellService {
         } finally {
             try {
                 checkout(originalCommitHash);
-            } catch (Exception e) {
-                System.out.println("Attenzione: impossibile ripristinare il commit originale della repository.");
-                e.printStackTrace();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOGGER.log(Level.SEVERE,
+                        "Attenzione: impossibile ripristinare il commit originale della repository.",
+                        e);
+            } catch (IOException e) {
+                LOGGER.log(Level.SEVERE,
+                        "Attenzione: impossibile ripristinare il commit originale della repository.",
+                        e);
             }
         }
 
