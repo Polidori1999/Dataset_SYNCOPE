@@ -58,8 +58,7 @@ public class MetricService {
     private static final Logger LOGGER =
             Logger.getLogger(MetricService.class.getName());
 
-    private static final DateTimeFormatter GIT_BEFORE_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
 
     private final String projectName;
     private final Path repositoryPath;
@@ -663,49 +662,7 @@ public class MetricService {
         return changedFiles;
     }
 
-    private String findLastCommitOfReleaseDay(String releaseDate,
-                                              String referenceCommitHash)
-            throws IOException, InterruptedException {
-        LocalDateTime endExclusive = DateUtils.parseReleaseDate(releaseDate).plusDays(1);
-        String formattedDate = endExclusive.format(GIT_BEFORE_FORMAT);
 
-        List<String> lines = GitCommandRunner.runCommand(
-                repositoryPath.toString(),
-                "git",
-                "rev-list",
-                "-n",
-                "1",
-                "--before=" + formattedDate,
-                "--first-parent",
-                referenceCommitHash
-        );
-
-        if (lines.isEmpty()) {
-            return "";
-        }
-
-        return lines.get(0).trim();
-    }
-
-    private String getCurrentCommitHash() throws IOException {
-        try {
-            List<String> lines = GitCommandRunner.runCommand(
-                    repositoryPath.toString(),
-                    "git",
-                    "rev-parse",
-                    "HEAD"
-            );
-
-            if (lines.isEmpty()) {
-                return "";
-            }
-
-            return lines.get(0).trim();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interruzione durante la lettura del commit corrente.", e);
-        }
-    }
 
     private void checkout(String commitHash) throws IOException, InterruptedException {
         if (commitHash == null || commitHash.isBlank()) {
