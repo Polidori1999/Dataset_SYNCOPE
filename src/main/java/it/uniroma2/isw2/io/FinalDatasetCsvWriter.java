@@ -87,28 +87,33 @@ public class FinalDatasetCsvWriter {
             String normalizedClassPath = normalizePath(ticketBuggyClass.getClassPath());
 
             for (Release release : selectedReleases) {
-                if (!affectedReleaseNames.contains(release.getVersionName())) {
-                    continue;
-                }
-
                 String positiveKey = buildClassReleaseKey(
                         normalizedClassPath,
                         release.getVersionId()
                 );
 
-                /*
-                 * Mantieni il positivo solo se la classe esiste davvero
-                 * nello snapshot della release.
-                 */
-                if (!existingClassReleaseKeys.contains(positiveKey)) {
-                    continue;
+                if (isPositiveClassRelease(
+                        release,
+                        positiveKey,
+                        affectedReleaseNames,
+                        existingClassReleaseKeys
+                )) {
+                    result.add(positiveKey);
                 }
-
-                result.add(positiveKey);
             }
         }
 
         return result;
+    }
+    private static boolean isPositiveClassRelease(
+            Release release,
+            String positiveKey,
+            Set<String> affectedReleaseNames,
+            Set<String> existingClassReleaseKeys
+    ) {
+
+        return affectedReleaseNames.contains(release.getVersionName())
+                && existingClassReleaseKeys.contains(positiveKey);
     }
 
     private static Set<String> buildExistingClassReleaseKeys(List<ReleaseJavaClass> releaseJavaClasses) {

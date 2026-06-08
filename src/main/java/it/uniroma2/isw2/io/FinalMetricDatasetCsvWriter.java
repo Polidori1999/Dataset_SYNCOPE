@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Crea il dataset finale nel formato dell'esempio:
@@ -20,11 +22,18 @@ import java.util.Map;
  * La chiave di merge è ReleaseID + ClassPath.
  */
 public class FinalMetricDatasetCsvWriter {
+    private static final Logger LOGGER =
+            Logger.getLogger(FinalMetricDatasetCsvWriter.class.getName());
 
     private static final int LABEL_CLASS_PATH_INDEX = 1;
     private static final int LABEL_RELEASE_ID_INDEX = 2;
     private static final int LABEL_RELEASE_INDEX_INDEX = 4;
     private static final int LABEL_BUGGINESS_INDEX = 5;
+
+    private static final int INVALID_ROW = -1;
+    private static final int MISSING_LABEL = 0;
+    private static final int WRITTEN_ROW = 1;
+
 
     private FinalMetricDatasetCsvWriter() {
     }
@@ -75,41 +84,20 @@ public class FinalMetricDatasetCsvWriter {
             int missingLabels = 0;
 
             while ((line = reader.readLine()) != null) {
-                List<String> fields = CsvUtils.parseCsvLine(line);
-
-                if (fields.size() <= Math.max(releaseIdIndex, classPathIndex)) {
-                    continue;
-                }
-
-                String releaseId = CsvUtils.removeQuotes(fields.get(releaseIdIndex)).trim();
-                String classPath = normalizePath(
-                        CsvUtils.removeQuotes(fields.get(classPathIndex))
+                int rowStatus = writeMetricRowIfPossible(
+                        writer,
+                        line,
+                        releaseIdIndex,
+                        classPathIndex,
+                        metricColumnIndexes,
+                        labelInfoByClassRelease
                 );
 
-                String key = buildKey(releaseId, classPath);
-                LabelInfo labelInfo = labelInfoByClassRelease.get(key);
-
-                if (labelInfo == null) {
+                if (rowStatus == WRITTEN_ROW) {
+                    writtenRows++;
+                } else if (rowStatus == MISSING_LABEL) {
                     missingLabels++;
-                    continue;
                 }
-
-                writer.append(CsvUtils.escapeCsv(labelInfo.releaseIndex)).append(",");
-                writer.append(CsvUtils.escapeCsv(classPath)).append(",");
-
-                for (int i = 0; i < metricColumnIndexes.size(); i++) {
-                    int columnIndex = metricColumnIndexes.get(i);
-
-                    String value = "";
-                    if (columnIndex < fields.size()) {
-                        value = CsvUtils.removeQuotes(fields.get(columnIndex));
-                    }
-
-                    writer.append(CsvUtils.escapeCsv(value)).append(",");
-                }
-
-                writer.append(CsvUtils.escapeCsv(labelInfo.bugginess)).append("\n");
-                writtenRows++;
             }
 
             if (missingLabels > 0) {
@@ -117,8 +105,60 @@ public class FinalMetricDatasetCsvWriter {
                         + missingLabels);
             }
 
-            System.out.println("Righe scritte nel dataset finale formato esempio: " + writtenRows);
+            LOGGER.log(Level.INFO,
+                    "Righe scritte nel dataset finale formato esempio: {0}",
+                    writtenRows);
         }
+    }
+    private static int writeMetricRowIfPossible(
+            FileWriter writer,
+            String line,
+            int releaseIdIndex,
+            int classPathIndex,
+            List<Integer> metricColumnIndexes,
+            Map<String, LabelInfo> labelInfoByClassRelease
+    ) throws IOException {
+        List<String> fields = CsvUtils.parseCsvLine(line);
+
+        if (fields.size() <= Math.max(releaseIdIndex, classPathIndex)) {
+            return INVALID_ROW;
+        }
+
+        String releaseId = CsvUtils.removeQuotes(fields.get(releaseIdIndex)).trim();
+        String classPath = normalizePath(
+                CsvUtils.removeQuotes(fields.get(classPathIndex))
+        );
+
+        LabelInfo labelInfo = labelInfoByClassRelease.get(buildKey(releaseId, classPath));
+
+        if (labelInfo == null) {
+            return MISSING_LABEL;
+        }
+
+        writeFinalMetricRow(writer, fields, classPath, metricColumnIndexes, labelInfo);
+        return WRITTEN_ROW;
+    }
+    private static void writeFinalMetricRow(
+            FileWriter writer,
+            List<String> fields,
+            String classPath,
+            List<Integer> metricColumnIndexes,
+            LabelInfo labelInfo
+    ) throws IOException {
+        writer.append(CsvUtils.escapeCsv(labelInfo.releaseIndex)).append(",");
+        writer.append(CsvUtils.escapeCsv(classPath)).append(",");
+
+        for (int columnIndex : metricColumnIndexes) {
+            String value = "";
+
+            if (columnIndex < fields.size()) {
+                value = CsvUtils.removeQuotes(fields.get(columnIndex));
+            }
+
+            writer.append(CsvUtils.escapeCsv(value)).append(",");
+        }
+
+        writer.append(CsvUtils.escapeCsv(labelInfo.bugginess)).append("\n");
     }
 
     private static void writeHeader(FileWriter writer,

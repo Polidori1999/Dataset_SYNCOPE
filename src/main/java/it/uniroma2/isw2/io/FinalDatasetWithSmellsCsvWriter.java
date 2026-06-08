@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Unisce il dataset classe-release con il CSV degli smell PMD.
@@ -24,7 +26,8 @@ public class FinalDatasetWithSmellsCsvWriter {
     private static final int SMELL_RELEASE_ID_INDEX = 1;
     private static final int SMELL_CLASS_PATH_INDEX = 2;
     private static final int SMELL_NSMELLS_INDEX = 3;
-
+    private static final Logger LOGGER =
+            Logger.getLogger(FinalDatasetWithSmellsCsvWriter.class.getName());
     private FinalDatasetWithSmellsCsvWriter() {
     }
 
@@ -85,7 +88,7 @@ public class FinalDatasetWithSmellsCsvWriter {
                         + " righe del dataset finale non hanno un valore NSmells.");
             }
 
-            System.out.println("Righe scritte nel dataset con smell: " + rows);
+            LOGGER.log(Level.INFO,"Righe scritte nel dataset con smell: {0} ", rows);
         }
     }
 

@@ -58,40 +58,7 @@ public class BuggyClassService {
             );
 
             for (String line : lines) {
-                String[] parts = line.split("\t", 3);
-                if (parts.length < 3) {
-                    continue;
-                }
-
-                String commitHash = parts[0].trim();
-                String epochString = parts[1].trim();
-                String subject = parts[2];
-
-                if (commitHash.isBlank() || epochString.isBlank()) {
-                    continue;
-                }
-
-                long epochSeconds;
-                try {
-                    epochSeconds = Long.parseLong(epochString);
-                } catch (NumberFormatException e) {
-                    continue;
-                }
-
-                Matcher matcher = TICKET_PATTERN.matcher(subject);
-                while (matcher.find()) {
-                    String ticketId = matcher.group().toUpperCase(Locale.ROOT);
-
-                    if (!validTicketIds.contains(ticketId)) {
-                        continue;
-                    }
-
-                    String key = ticketId + "|" + commitHash;
-                    unique.putIfAbsent(
-                            key,
-                            new TicketFixCommit(ticketId, commitHash, epochSeconds)
-                    );
-                }
+                processGitLogLine(line, validTicketIds, unique);
             }
 
             result.addAll(unique.values());
@@ -99,6 +66,55 @@ public class BuggyClassService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interruzione durante la ricerca dei fix commit.", e);
+        }
+    }
+    private static void processGitLogLine(String line,
+                                          Set<String> validTicketIds,
+                                          Map<String, TicketFixCommit> unique) {
+        String[] parts = line.split("\t", 3);
+
+        if (isValidGitLogLine(parts)) {
+            String commitHash = parts[0].trim();
+            long epochSeconds = parseEpochSeconds(parts[1].trim());
+            String subject = parts[2];
+
+            if (epochSeconds > 0) {
+                addFixCommitsFromSubject(subject, commitHash, epochSeconds, validTicketIds, unique);
+            }
+        }
+    }
+
+    private static boolean isValidGitLogLine(String[] parts) {
+        return parts.length >= 3
+                && !parts[0].trim().isBlank()
+                && !parts[1].trim().isBlank();
+    }
+
+    private static long parseEpochSeconds(String epochString) {
+        try {
+            return Long.parseLong(epochString);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
+    }
+
+    private static void addFixCommitsFromSubject(String subject,
+                                                 String commitHash,
+                                                 long epochSeconds,
+                                                 Set<String> validTicketIds,
+                                                 Map<String, TicketFixCommit> unique) {
+        Matcher matcher = TICKET_PATTERN.matcher(subject);
+
+        while (matcher.find()) {
+            String ticketId = matcher.group().toUpperCase(Locale.ROOT);
+
+            if (validTicketIds.contains(ticketId)) {
+                String key = ticketId + "|" + commitHash;
+                unique.putIfAbsent(
+                        key,
+                        new TicketFixCommit(ticketId, commitHash, epochSeconds)
+                );
+            }
         }
     }
 
@@ -115,44 +131,69 @@ public class BuggyClassService {
         }
 
         for (TicketFixCommit fixCommit : fixCommits) {
-            String parentHash = findParentCommit(fixCommit.getFixCommitHash(), repositoryPath);
-            if (parentHash.isBlank()) {
-                continue;
-            }
+            addBuggyClassesForFixCommit(fixCommit, repositoryPath, result, seen);
+        }
 
+        return result;
+    }
+    private static void addBuggyClassesForFixCommit(TicketFixCommit fixCommit,
+                                                    String repositoryPath,
+                                                    List<TicketBuggyClass> result,
+                                                    Set<String> seen) throws IOException {
+        String parentHash = findParentCommit(fixCommit.getFixCommitHash(), repositoryPath);
+
+        if (!parentHash.isBlank()) {
             List<String> changedFiles = findChangedFiles(
                     parentHash,
                     fixCommit.getFixCommitHash(),
                     repositoryPath
             );
 
-            for (String filePath : changedFiles) {
-                String normalizedPath = normalizePath(filePath);
+            addBuggyClassesFromChangedFiles(
+                    fixCommit,
+                    parentHash,
+                    changedFiles,
+                    repositoryPath,
+                    result,
+                    seen
+            );
+        }
+    }
 
-                if (!isProductionJavaClass(normalizedPath)) {
-                    continue;
-                }
+    private static void addBuggyClassesFromChangedFiles(TicketFixCommit fixCommit,
+                                                        String parentHash,
+                                                        List<String> changedFiles,
+                                                        String repositoryPath,
+                                                        List<TicketBuggyClass> result,
+                                                        Set<String> seen) throws IOException {
+        for (String filePath : changedFiles) {
+            String normalizedPath = normalizePath(filePath);
 
-                if (isBuggyJavaFileByBlame(
-                        parentHash,
-                        fixCommit.getFixCommitHash(),
-                        normalizedPath,
-                        repositoryPath
-                )) {
-                    String key = fixCommit.getTicketId() + "|" + normalizedPath;
-
-                    if (seen.add(key)) {
-                        result.add(new TicketBuggyClass(
-                                fixCommit.getTicketId(),
-                                fixCommit.getFixCommitHash(),
-                                normalizedPath
-                        ));
-                    }
-                }
+            if (isProductionJavaClass(normalizedPath)
+                    && isBuggyJavaFileByBlame(
+                    parentHash,
+                    fixCommit.getFixCommitHash(),
+                    normalizedPath,
+                    repositoryPath
+            )) {
+                addTicketBuggyClass(fixCommit, normalizedPath, result, seen);
             }
         }
+    }
 
-        return result;
+    private static void addTicketBuggyClass(TicketFixCommit fixCommit,
+                                            String normalizedPath,
+                                            List<TicketBuggyClass> result,
+                                            Set<String> seen) {
+        String key = fixCommit.getTicketId() + "|" + normalizedPath;
+
+        if (seen.add(key)) {
+            result.add(new TicketBuggyClass(
+                    fixCommit.getTicketId(),
+                    fixCommit.getFixCommitHash(),
+                    normalizedPath
+            ));
+        }
     }
 
     private static Set<String> extractValidTicketIds(List<EnhancedTicket> tickets) {
@@ -270,25 +311,10 @@ public class BuggyClassService {
 
             for (String line : diffLines) {
                 Matcher matcher = HUNK_PATTERN.matcher(line);
-                if (!matcher.matches()) {
-                    continue;
+
+                if (matcher.matches()) {
+                    addParentChangedRange(matcher, ranges);
                 }
-
-                int oldStart = Integer.parseInt(matcher.group(1));
-                int oldCount = matcher.group(2) == null ? 1 : Integer.parseInt(matcher.group(2));
-
-                /*
-                 * Se oldCount = 0, l'hunk contiene solo aggiunte.
-                 * In questa versione semplificata di SZZ non possiamo fare blame
-                 * su righe precedenti che non esistono.
-                 */
-                if (oldCount == 0) {
-                    continue;
-                }
-
-                int start = oldStart;
-                int end = oldStart + oldCount - 1;
-                ranges.add(new int[]{start, end});
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -298,6 +324,21 @@ public class BuggyClassService {
         return ranges;
     }
 
+    private static void addParentChangedRange(Matcher matcher, List<int[]> ranges) {
+        int oldStart = Integer.parseInt(matcher.group(1));
+        int oldCount = matcher.group(2) == null ? 1 : Integer.parseInt(matcher.group(2));
+
+        /*
+         * Se oldCount = 0, l'hunk contiene solo aggiunte.
+         * In questa versione semplificata di SZZ non possiamo fare blame
+         * su righe precedenti che non esistono.
+         */
+        if (oldCount > 0) {
+            int start = oldStart;
+            int end = oldStart + oldCount - 1;
+            ranges.add(new int[]{start, end});
+        }
+    }
     private static List<String> blameParentRange(String parentHash,
                                                  String filePath,
                                                  int start,
