@@ -272,22 +272,14 @@ public class Milestone4ClassSelector {
                     : (double) nSmells / stats.sizeLoc;
 
             result.add(RankedClass.builder()
-                    .releaseId(latestRelease.getVersionId())
-                    .releaseName(latestRelease.getVersionName())
-                    .classPath(classPath)
-                    .qualifiedName(toQualifiedName(classPath))
-                    .nSmells(nSmells)
-                    .sizeLoc(stats.sizeLoc)
-                    .nom(stats.nom)
-                    .publicMethods(stats.publicMethods)
-                    .avgMethodSize(stats.avgMethodSize)
-                    .cycloComplexity(stats.cycloComplexity)
-                    .fanOut(stats.fanOut)
-                    .smellDensity(smellDensity)
-                    .isAbstract(stats.isAbstract)
-                    .isInterface(stats.isInterface)
-                    .isEnum(stats.isEnum)
-                    .isAnnotation(stats.isAnnotation)
+                    .identity(
+                            latestRelease.getVersionId(),
+                            latestRelease.getVersionName(),
+                            classPath,
+                            toQualifiedName(classPath)
+                    )
+                    .smellMetrics(nSmells, smellDensity)
+                    .sourceMetrics(stats)
                     .build());
         }
 
@@ -342,16 +334,20 @@ public class Milestone4ClassSelector {
             boolean isAnnotation = !cu.findAll(AnnotationDeclaration.class).isEmpty();
 
             return SourceStats.builder()
-                    .sizeLoc(sizeLoc)
-                    .nom(nom)
-                    .publicMethods(publicMethods)
-                    .avgMethodSize(avgMethodSize)
-                    .cycloComplexity(cycloComplexity)
-                    .fanOut(fanOut)
-                    .isAbstract(isAbstract)
-                    .isInterface(isInterface)
-                    .isEnum(isEnum)
-                    .isAnnotation(isAnnotation)
+                    .sizeMetrics(
+                            sizeLoc,
+                            nom,
+                            publicMethods,
+                            avgMethodSize,
+                            cycloComplexity,
+                            fanOut
+                    )
+                    .typeFlags(
+                            isAbstract,
+                            isInterface,
+                            isEnum,
+                            isAnnotation
+                    )
                     .build();
 
         } catch (Exception e) {
@@ -369,16 +365,20 @@ public class Milestone4ClassSelector {
             boolean isAnnotation = source.contains("@interface ");
 
             return SourceStats.builder()
-                    .sizeLoc(sizeLoc)
-                    .nom(nom)
-                    .publicMethods(publicMethods)
-                    .avgMethodSize(avgMethodSize)
-                    .cycloComplexity(cycloComplexity)
-                    .fanOut(fanOut)
-                    .isAbstract(isAbstract)
-                    .isInterface(isInterface)
-                    .isEnum(isEnum)
-                    .isAnnotation(isAnnotation)
+                    .sizeMetrics(
+                            sizeLoc,
+                            nom,
+                            publicMethods,
+                            avgMethodSize,
+                            cycloComplexity,
+                            fanOut
+                    )
+                    .typeFlags(
+                            isAbstract,
+                            isInterface,
+                            isEnum,
+                            isAnnotation
+                    )
                     .build();
         }
     }
@@ -686,53 +686,33 @@ public class Milestone4ClassSelector {
             private boolean isEnum;
             private boolean isAnnotation;
 
-            private Builder sizeLoc(int value) {
-                this.sizeLoc = value;
+            private Builder sizeMetrics(
+                    int sizeLoc,
+                    int nom,
+                    int publicMethods,
+                    double avgMethodSize,
+                    int cycloComplexity,
+                    int fanOut
+            ) {
+                this.sizeLoc = sizeLoc;
+                this.nom = nom;
+                this.publicMethods = publicMethods;
+                this.avgMethodSize = avgMethodSize;
+                this.cycloComplexity = cycloComplexity;
+                this.fanOut = fanOut;
                 return this;
             }
 
-            private Builder nom(int value) {
-                this.nom = value;
-                return this;
-            }
-
-            private Builder publicMethods(int value) {
-                this.publicMethods = value;
-                return this;
-            }
-
-            private Builder avgMethodSize(double value) {
-                this.avgMethodSize = value;
-                return this;
-            }
-
-            private Builder cycloComplexity(int value) {
-                this.cycloComplexity = value;
-                return this;
-            }
-
-            private Builder fanOut(int value) {
-                this.fanOut = value;
-                return this;
-            }
-
-            private Builder isAbstract(boolean value) {
-                this.isAbstract = value;
-                return this;
-            }
-
-            private Builder isInterface(boolean value) {
-                this.isInterface = value;
-                return this;
-            }
-
-            private Builder isEnum(boolean value) {
-                this.isEnum = value;
-                return this;
-            }
-
-            private Builder isAnnotation(boolean value) {
-                this.isAnnotation = value;
+            private Builder typeFlags(
+                    boolean isAbstract,
+                    boolean isInterface,
+                    boolean isEnum,
+                    boolean isAnnotation
+            ) {
+                this.isAbstract = isAbstract;
+                this.isInterface = isInterface;
+                this.isEnum = isEnum;
+                this.isAnnotation = isAnnotation;
                 return this;
             }
 
@@ -1041,83 +1021,36 @@ public class Milestone4ClassSelector {
             private boolean isEnum;
             private boolean isAnnotation;
 
-            private Builder releaseId(String value) {
-                this.releaseId = value;
+            private Builder identity(
+                    String releaseId,
+                    String releaseName,
+                    String classPath,
+                    String qualifiedName
+            ) {
+                this.releaseId = releaseId;
+                this.releaseName = releaseName;
+                this.classPath = classPath;
+                this.qualifiedName = qualifiedName;
                 return this;
             }
 
-            private Builder releaseName(String value) {
-                this.releaseName = value;
+            private Builder smellMetrics(int nSmells, double smellDensity) {
+                this.nSmells = nSmells;
+                this.smellDensity = smellDensity;
                 return this;
             }
 
-            private Builder classPath(String value) {
-                this.classPath = value;
-                return this;
-            }
-
-            private Builder qualifiedName(String value) {
-                this.qualifiedName = value;
-                return this;
-            }
-
-            private Builder nSmells(int value) {
-                this.nSmells = value;
-                return this;
-            }
-
-            private Builder sizeLoc(int value) {
-                this.sizeLoc = value;
-                return this;
-            }
-
-            private Builder nom(int value) {
-                this.nom = value;
-                return this;
-            }
-
-            private Builder publicMethods(int value) {
-                this.publicMethods = value;
-                return this;
-            }
-
-            private Builder avgMethodSize(double value) {
-                this.avgMethodSize = value;
-                return this;
-            }
-
-            private Builder cycloComplexity(int value) {
-                this.cycloComplexity = value;
-                return this;
-            }
-
-            private Builder fanOut(int value) {
-                this.fanOut = value;
-                return this;
-            }
-
-            private Builder smellDensity(double value) {
-                this.smellDensity = value;
-                return this;
-            }
-
-            private Builder isAbstract(boolean value) {
-                this.isAbstract = value;
-                return this;
-            }
-
-            private Builder isInterface(boolean value) {
-                this.isInterface = value;
-                return this;
-            }
-
-            private Builder isEnum(boolean value) {
-                this.isEnum = value;
-                return this;
-            }
-
-            private Builder isAnnotation(boolean value) {
-                this.isAnnotation = value;
+            private Builder sourceMetrics(SourceStats stats) {
+                this.sizeLoc = stats.sizeLoc;
+                this.nom = stats.nom;
+                this.publicMethods = stats.publicMethods;
+                this.avgMethodSize = stats.avgMethodSize;
+                this.cycloComplexity = stats.cycloComplexity;
+                this.fanOut = stats.fanOut;
+                this.isAbstract = stats.isAbstract;
+                this.isInterface = stats.isInterface;
+                this.isEnum = stats.isEnum;
+                this.isAnnotation = stats.isAnnotation;
                 return this;
             }
 
