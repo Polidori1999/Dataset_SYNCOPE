@@ -1,0 +1,2 @@
+org.apache.syncope.core.provisioning.java.job.DefaultJobManager
+org.apache.syncope.core.spring.security.AuthDataAccessor
