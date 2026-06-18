@@ -98,11 +98,10 @@ public class TicketVersionEnricher {
              * In questo progetto, resolutionDate è usata come proxy
              * della fix commit date.
              */
-            if (releaseDate.isAfter(resolutionDate) &&
-                bestRelease == null || releaseDate.isBefore(bestDate)) {
-                    bestRelease = release;
-                    bestDate = releaseDate;
-
+            if (releaseDate.isAfter(resolutionDate)
+                    && (bestRelease == null || releaseDate.isBefore(bestDate))) {
+                bestRelease = release;
+                bestDate = releaseDate;
             }
         }
 
